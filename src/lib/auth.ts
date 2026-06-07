@@ -35,6 +35,9 @@ export const authOptions: NextAuthOptions = {
 
         if (!isValid) return null;
 
+        /* Cek email sudah diverifikasi */
+        if (!user.emailVerified) return null;
+
         return {
           id: user.id,
           email: user.email,

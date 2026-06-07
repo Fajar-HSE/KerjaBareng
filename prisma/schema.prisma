@@ -31,15 +31,18 @@ enum NotificationType {
 }
 
 model Profile {
-  id            String         @id @default(uuid())
-  email         String         @unique
-  fullName      String
-  passwordHash  String
-  role          Role           @default(user)
-  division      String?
-  avatarUrl     String?
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  id                  String    @id @default(uuid())
+  email               String    @unique
+  fullName            String
+  passwordHash        String
+  role                Role      @default(user)
+  division            String?
+  avatarUrl           String?
+  emailVerified       Boolean   @default(false)
+  emailVerifyToken    String?   @unique
+  emailVerifyExpires  DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   assignedTasks Task[]         @relation("AssignedTo")
   createdTasks  Task[]         @relation("AssignedBy")

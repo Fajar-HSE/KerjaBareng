@@ -35,6 +35,6 @@ export const config = {
      * - /_next/* (Next.js internals)
      * - /favicon.ico, file statis
      */
-    "/((?!login|api/auth|_next/static|_next/image|favicon.ico).*)",
+    "/((?!login|register|verify-email|api/auth|_next/static|_next/image|favicon.ico).*)",
   ],
 };

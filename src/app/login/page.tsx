@@ -3,7 +3,8 @@
 import { useState, useEffect } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Eye, EyeOff, Briefcase, Loader2, AlertCircle, ShieldAlert } from "lucide-react";
+import Link from "next/link";
+import { Eye, EyeOff, Briefcase, Loader2, AlertCircle, ShieldAlert, CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /* ─── Alert variants ─────────────────────────────────────────── */
@@ -13,7 +14,7 @@ function Alert({ type, message }: { type: AlertType; message: string }) {
   const styles: Record<AlertType, { bg: string; border: string; text: string; icon: React.ElementType }> = {
     error:   { bg: "bg-red-50",    border: "border-red-200",    text: "text-red-600",    icon: AlertCircle },
     warning: { bg: "bg-amber-50",  border: "border-amber-200",  text: "text-amber-700",  icon: ShieldAlert },
-    info:    { bg: "bg-[#e8f4f8]", border: "border-[#1a5f7a]/20", text: "text-[#1a5f7a]", icon: AlertCircle },
+    info:    { bg: "bg-[#e8f4f8]", border: "border-[#1a5f7a]/20", text: "text-[#1a5f7a]", icon: CheckCircle2 },
   };
   const s = styles[type];
   const Icon = s.icon;
@@ -47,6 +48,11 @@ export default function LoginPage() {
       setAlert({ type: "warning", message: "Kamu tidak punya akses ke halaman tersebut." });
     } else if (err === "SessionRequired" || (callbackUrl && !err)) {
       setAlert({ type: "info", message: "Silakan login terlebih dahulu." });
+    }
+
+    const verified = searchParams.get("verified");
+    if (verified === "success") {
+      setAlert({ type: "info", message: "Email berhasil diverifikasi! Silakan login." });
     }
   }, [searchParams]);
 
@@ -179,9 +185,10 @@ export default function LoginPage() {
 
         {/* Footer */}
         <p className="text-center text-xs text-slate-400 mt-6">
-          Akun dibuat oleh admin.{" "}
-          <span className="text-[#1a5f7a]">Hubungi administrator</span>{" "}
-          jika belum punya akses.
+          Belum punya akun?{" "}
+          <Link href="/register" className="text-[#1a5f7a] font-medium hover:underline">
+            Daftar sekarang
+          </Link>
         </p>
       </div>
     </div>
