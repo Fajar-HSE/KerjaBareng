@@ -66,8 +66,13 @@ export default function RegisterPage() {
 
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error ?? "Terjadi kesalahan. Coba lagi.");
+        if (res.status === 429) {
+          setError(data.error ?? "Terlalu banyak percobaan. Coba lagi nanti.");
+        } else {
+          setError(data.error ?? "Terjadi kesalahan. Coba lagi.");
+        }
       } else {
+        /* 200 selalu — baik email baru maupun sudah terdaftar */
         setSuccess(true);
       }
     } catch {
@@ -88,8 +93,9 @@ export default function RegisterPage() {
           <div>
             <h1 className="text-xl font-semibold text-slate-900">Cek email kamu!</h1>
             <p className="text-sm text-slate-500 mt-2 leading-relaxed">
-              Link verifikasi sudah dikirim ke{" "}
-              <span className="font-semibold text-slate-700">{form.email}</span>.
+              Jika email{" "}
+              <span className="font-semibold text-slate-700">{form.email}</span>{" "}
+              valid dan belum terdaftar, link verifikasi sudah dikirim.
               <br />Klik link tersebut untuk mengaktifkan akunmu.
             </p>
           </div>

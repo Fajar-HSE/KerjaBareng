@@ -1,12 +1,21 @@
 import nodemailer from "nodemailer";
 
+/* ── Env validation ──────────────────────────────────────────── */
+const smtpUser = process.env.SMTP_USER;
+const smtpPass = process.env.SMTP_PASS;
+
+if (process.env.NODE_ENV === "production" && (!smtpUser || !smtpPass)) {
+  console.error("[MAILER] SMTP_USER dan SMTP_PASS wajib di-set di production.");
+}
+
+/** @internal — gunakan fungsi send* di bawah, bukan transporter langsung */
 export const transporter = nodemailer.createTransport({
   host:   process.env.SMTP_HOST   ?? "smtp.gmail.com",
   port:   Number(process.env.SMTP_PORT ?? 587),
   secure: false,
   auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
+    user: smtpUser,
+    pass: smtpPass,
   },
 });
 
