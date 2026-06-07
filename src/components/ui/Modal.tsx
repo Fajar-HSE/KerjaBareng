@@ -1,17 +1,17 @@
 "use client";
 
-import { useRef } from "react";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useOverlayBehavior } from "@/hooks/useOverlayBehavior";
+import { useFocusTrap } from "@/hooks/useFocusTrap";
 
 interface ModalProps {
-  open:        boolean;
-  onClose:     () => void;
-  title?:      string;
+  open:         boolean;
+  onClose:      () => void;
+  title?:       string;
   description?: string;
-  size?:       "sm" | "md" | "lg" | "xl";
-  children:    React.ReactNode;
+  size?:        "sm" | "md" | "lg" | "xl";
+  children:     React.ReactNode;
 }
 
 const sizeMap = {
@@ -24,22 +24,26 @@ const sizeMap = {
 export default function Modal({
   open, onClose, title, description, size = "md", children,
 }: ModalProps) {
-  const overlayRef = useRef<HTMLDivElement>(null);
   useOverlayBehavior(open, onClose);
+  const containerRef = useFocusTrap(open);
 
   if (!open) return null;
 
   return (
+    /* Backdrop layer — klik di luar panel menutup modal */
     <div
-      ref={overlayRef}
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      onClick={(e) => { if (e.target === overlayRef.current) onClose(); }}
+      onClick={(e) => { if (e.currentTarget === e.target) onClose(); }}
     >
-      {/* Backdrop */}
-      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-[2px]" aria-hidden />
-
-      {/* Panel */}
+      {/* Visual backdrop */}
       <div
+        className="absolute inset-0 bg-slate-900/40 backdrop-blur-[2px]"
+        aria-hidden="true"
+      />
+
+      {/* Dialog panel */}
+      <div
+        ref={containerRef}
         className={cn(
           "relative w-full bg-white rounded-xl shadow-xl",
           "flex flex-col max-h-[90vh]",

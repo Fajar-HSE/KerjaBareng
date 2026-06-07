@@ -3,6 +3,7 @@
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useOverlayBehavior } from "@/hooks/useOverlayBehavior";
+import { useFocusTrap } from "@/hooks/useFocusTrap";
 
 interface DrawerProps {
   open:     boolean;
@@ -16,6 +17,7 @@ export default function Drawer({
   open, onClose, title, children, width = "w-[480px]",
 }: DrawerProps) {
   useOverlayBehavior(open, onClose);
+  const containerRef = useFocusTrap(open);
 
   const titleId = "drawer-title";
 
@@ -24,7 +26,7 @@ export default function Drawer({
       {/* Backdrop */}
       <div
         onClick={onClose}
-        aria-hidden
+        aria-hidden="true"
         className={cn(
           "fixed inset-0 z-40 bg-slate-900/30 backdrop-blur-[2px]",
           "transition-opacity duration-200",
@@ -34,6 +36,7 @@ export default function Drawer({
 
       {/* Panel */}
       <div
+        ref={containerRef}
         className={cn(
           "fixed right-0 top-0 bottom-0 z-50 bg-white shadow-2xl",
           "flex flex-col transition-transform duration-250 max-w-full",
@@ -43,6 +46,9 @@ export default function Drawer({
         role="dialog"
         aria-modal="true"
         aria-labelledby={title ? titleId : undefined}
+        /* inert saat tertutup — sembunyikan dari keyboard dan assistive tech */
+        aria-hidden={!open || undefined}
+        tabIndex={open ? undefined : -1}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 shrink-0">
