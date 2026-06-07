@@ -2,16 +2,16 @@
 
 import { useState } from "react";
 import { Bell, Search, Plus, ChevronDown } from "lucide-react";
+import Link from "next/link";
 import { cn } from "@/lib/utils";
 
 /* ─── Notification dot ──────────────────────────────────────── */
 function NotifBell() {
   return (
-    <button className="relative btn btn-ghost p-2 rounded-lg" aria-label="Notifikasi">
+    <Link href="/notifications" className="relative btn btn-ghost p-2 rounded-lg" aria-label="Notifikasi">
       <Bell size={18} />
-      {/* Unread indicator */}
       <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-amber-500 border-2 border-white" />
-    </button>
+    </Link>
   );
 }
 
