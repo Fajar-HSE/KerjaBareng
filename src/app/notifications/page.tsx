@@ -2,9 +2,11 @@
 
 import { useState } from "react";
 import AppShell from "@/components/layout/AppShell";
+import { useApi } from "@/hooks/useApi";
+import { NotifItemSkeleton } from "@/components/ui/Skeleton";
 import {
   Bell, CheckSquare, MessageSquare, AlertTriangle,
-  Check, Trash2, BellOff, Clock,
+  Check, Trash2, BellOff, Clock, RefreshCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -12,40 +14,43 @@ import { cn } from "@/lib/utils";
 type NotifType = "deadline" | "mention" | "assignment";
 
 interface Notification {
-  id: string;
-  type: NotifType;
-  title: string;
-  message: string;
-  time: string;
-  isRead: boolean;
-  taskTitle?: string;
+  id:        string;
+  type:      NotifType;
+  title:     string;
+  message:   string;
+  createdAt: string;
+  isRead:    boolean;
 }
 
-/* ─── Mock Data ─────────────────────────────────────────────── */
-const MOCK_NOTIFS: Notification[] = [
-  { id: "1",  type: "deadline",   title: "Deadline Terlewat",        message: "Tugas 'Testing fitur upload bukti' telah melewati deadline.",                  time: "5 menit lalu",  isRead: false, taskTitle: "Testing fitur upload bukti" },
-  { id: "2",  type: "assignment", title: "Tugas Baru Ditugaskan",    message: "Admin menugaskan kamu untuk 'Review PR authentication module'.",               time: "1 jam lalu",    isRead: false, taskTitle: "Review PR authentication module" },
-  { id: "3",  type: "mention",    title: "Kamu Disebutkan",          message: "Citra A. menyebut kamu di komentar tugas 'Finalisasi desain landing page'.",   time: "2 jam lalu",    isRead: false, taskTitle: "Finalisasi desain landing page" },
-  { id: "4",  type: "deadline",   title: "Deadline Mendekati",       message: "Tugas 'Setup cron deadline checker' deadline besok jam 15:00.",               time: "3 jam lalu",    isRead: true,  taskTitle: "Setup cron deadline checker" },
-  { id: "5",  type: "assignment", title: "Status Tugas Diperbarui",  message: "Budi S. mengubah status 'Finalisasi desain landing page' menjadi In Progress.", time: "5 jam lalu",    isRead: true,  taskTitle: "Finalisasi desain landing page" },
-  { id: "6",  type: "mention",    title: "Kamu Disebutkan",          message: "Fajar L. menyebut kamu di chat tugas 'Setup cron deadline checker'.",          time: "Kemarin",       isRead: true,  taskTitle: "Setup cron deadline checker" },
-  { id: "7",  type: "deadline",   title: "Laporan Deadline Harian",  message: "3 tugas overdue hari ini: Testing fitur upload, Review PR, Update docs.",     time: "Kemarin",       isRead: true },
-  { id: "8",  type: "assignment", title: "Tugas Selesai",            message: "Deni R. menandai 'Update dokumentasi API v2' sebagai selesai.",               time: "2 hari lalu",   isRead: true,  taskTitle: "Update dokumentasi API v2" },
-];
+interface NotifResponse {
+  notifications: Notification[];
+  unreadCount:   number;
+}
 
-/* ─── Notif Config ──────────────────────────────────────────── */
+/* ─── Config ─────────────────────────────────────────────────── */
 const NOTIF_CONFIG: Record<NotifType, { icon: React.ElementType; iconBg: string; iconColor: string }> = {
-  deadline:   { icon: AlertTriangle, iconBg: "bg-red-100",   iconColor: "text-red-600" },
-  mention:    { icon: MessageSquare, iconBg: "bg-blue-100",  iconColor: "text-blue-600" },
-  assignment: { icon: CheckSquare,   iconBg: "bg-[#e8f4f8]", iconColor: "text-[#1a5f7a]" },
+  deadline:   { icon: AlertTriangle, iconBg: "bg-red-100",   iconColor: "text-red-600"     },
+  mention:    { icon: MessageSquare, iconBg: "bg-blue-100",  iconColor: "text-blue-600"    },
+  assignment: { icon: CheckSquare,   iconBg: "bg-[#e8f4f8]", iconColor: "text-[#1a5f7a]"  },
 };
 
 const FILTER_TABS: { key: "all" | NotifType; label: string }[] = [
-  { key: "all",        label: "Semua" },
+  { key: "all",        label: "Semua"    },
   { key: "deadline",   label: "Deadline" },
-  { key: "assignment", label: "Tugas" },
-  { key: "mention",    label: "Mention" },
+  { key: "assignment", label: "Tugas"    },
+  { key: "mention",    label: "Mention"  },
 ];
+
+function timeAgo(date: string) {
+  const diff = Date.now() - new Date(date).getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 1)   return "baru saja";
+  if (m < 60)  return `${m} menit lalu`;
+  const h = Math.floor(m / 60);
+  if (h < 24)  return `${h} jam lalu`;
+  const d = Math.floor(h / 24);
+  return `${d} hari lalu`;
+}
 
 /* ─── Notification Item ─────────────────────────────────────── */
 function NotifItem({
@@ -54,10 +59,10 @@ function NotifItem({
   onDelete,
 }: {
   notif: Notification;
-  onRead: (id: string) => void;
+  onRead:   (id: string) => void;
   onDelete: (id: string) => void;
 }) {
-  const c = NOTIF_CONFIG[notif.type];
+  const c    = NOTIF_CONFIG[notif.type] ?? NOTIF_CONFIG.assignment;
   const Icon = c.icon;
 
   return (
@@ -65,21 +70,17 @@ function NotifItem({
       "flex items-start gap-4 px-5 py-4 border-b border-slate-100 last:border-0 transition-colors group",
       !notif.isRead ? "bg-[#f0f8fb]" : "hover:bg-slate-50"
     )}>
-      {/* Icon */}
       <div className={cn("w-9 h-9 rounded-xl flex items-center justify-center shrink-0 mt-0.5", c.iconBg)}>
         <Icon size={16} className={c.iconColor} />
       </div>
 
-      {/* Content */}
       <div className="flex-1 min-w-0">
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-center gap-2">
-            <p className={cn("text-sm font-medium text-slate-800", !notif.isRead && "font-semibold")}>
+            <p className={cn("text-sm text-slate-800", !notif.isRead && "font-semibold")}>
               {notif.title}
             </p>
-            {!notif.isRead && (
-              <span className="w-2 h-2 rounded-full bg-[#1a5f7a] shrink-0" />
-            )}
+            {!notif.isRead && <span className="w-2 h-2 rounded-full bg-[#1a5f7a] shrink-0" />}
           </div>
           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
             {!notif.isRead && (
@@ -94,21 +95,16 @@ function NotifItem({
             <button
               onClick={() => onDelete(notif.id)}
               className="p-1 rounded text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors"
-              title="Hapus notifikasi"
+              title="Hapus"
             >
               <Trash2 size={13} />
             </button>
           </div>
         </div>
         <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{notif.message}</p>
-        {notif.taskTitle && (
-          <p className="text-xs text-[#1a5f7a] mt-1 font-medium truncate">
-            📋 {notif.taskTitle}
-          </p>
-        )}
         <div className="flex items-center gap-1 mt-1.5">
           <Clock size={10} className="text-slate-400" />
-          <span className="text-[11px] text-slate-400 font-mono">{notif.time}</span>
+          <span className="text-[11px] text-slate-400 font-mono">{timeAgo(notif.createdAt)}</span>
         </div>
       </div>
     </div>
@@ -117,36 +113,65 @@ function NotifItem({
 
 /* ─── Page ──────────────────────────────────────────────────── */
 export default function NotificationsPage() {
-  const [notifs, setNotifs]   = useState<Notification[]>(MOCK_NOTIFS);
-  const [filter, setFilter]   = useState<"all" | NotifType>("all");
+  const [filter, setFilter] = useState<"all" | NotifType>("all");
+
+  const { data, loading, error, refetch } = useApi<NotifResponse>("/api/notifications");
+
+  /* Local state untuk optimistic updates */
+  const [localNotifs, setLocalNotifs] = useState<Notification[] | null>(null);
+  const notifs = localNotifs ?? data?.notifications ?? [];
+
+  /* Sync dari API saat data berubah */
+  if (data?.notifications && !localNotifs) {
+    setLocalNotifs(data.notifications);
+  }
 
   const unreadCount = notifs.filter((n) => !n.isRead).length;
 
-  const filtered = notifs.filter((n) =>
-    filter === "all" ? true : n.type === filter
-  );
+  const filtered = notifs.filter((n) => filter === "all" || n.type === filter);
 
-  function markRead(id: string) {
-    setNotifs((prev) => prev.map((n) => n.id === id ? { ...n, isRead: true } : n));
+  /* ── Handlers ── */
+  async function markRead(id: string) {
+    setLocalNotifs((prev) => prev?.map((n) => n.id === id ? { ...n, isRead: true } : n) ?? null);
+    await fetch("/api/notifications", {
+      method:  "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ id }),
+    });
   }
 
-  function markAllRead() {
-    setNotifs((prev) => prev.map((n) => ({ ...n, isRead: true })));
+  async function markAllRead() {
+    setLocalNotifs((prev) => prev?.map((n) => ({ ...n, isRead: true })) ?? null);
+    await fetch("/api/notifications", { method: "PATCH" });
   }
 
-  function deleteNotif(id: string) {
-    setNotifs((prev) => prev.filter((n) => n.id !== id));
+  async function deleteNotif(id: string) {
+    setLocalNotifs((prev) => prev?.filter((n) => n.id !== id) ?? null);
+    await fetch(`/api/notifications?id=${id}`, { method: "DELETE" });
   }
 
   return (
     <AppShell
       title="Notifikasi"
-      subtitle={unreadCount > 0 ? `${unreadCount} notifikasi belum dibaca` : "Semua notifikasi sudah dibaca"}
+      subtitle={unreadCount > 0
+        ? `${unreadCount} notifikasi belum dibaca`
+        : "Semua notifikasi sudah dibaca"
+      }
     >
       <div className="max-w-2xl flex flex-col gap-4">
+        {/* Error */}
+        {error && (
+          <div className="flex items-center gap-3 px-4 py-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-600">
+            <AlertTriangle size={15} className="shrink-0" />
+            <span className="flex-1">{error}</span>
+            <button onClick={refetch} className="flex items-center gap-1.5 font-medium hover:underline">
+              <RefreshCw size={13} /> Coba Lagi
+            </button>
+          </div>
+        )}
+
         {/* Toolbar */}
-        <div className="flex items-center justify-between gap-3">
-          {/* Filter tabs */}
+        <div className="flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-lg p-1">
             {FILTER_TABS.map((tab) => {
               const count = tab.key === "all"
@@ -175,22 +200,24 @@ export default function NotificationsPage() {
             })}
           </div>
 
-          {/* Actions */}
           <div className="flex items-center gap-2">
             {unreadCount > 0 && (
-              <button
-                onClick={markAllRead}
-                className="btn btn-secondary h-8 px-3 text-xs gap-1.5 rounded-lg"
-              >
-                <Check size={13} />
-                Tandai Semua
+              <button onClick={markAllRead} className="btn btn-secondary h-8 px-3 text-xs gap-1.5 rounded-lg">
+                <Check size={12} /> Tandai Semua
               </button>
             )}
+            <button onClick={refetch} className="btn btn-secondary h-8 px-3 text-xs rounded-lg" title="Refresh">
+              <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
+            </button>
           </div>
         </div>
 
-        {/* Notification list */}
-        {filtered.length === 0 ? (
+        {/* List */}
+        {loading ? (
+          <div className="card overflow-hidden">
+            {Array.from({ length: 4 }).map((_, i) => <NotifItemSkeleton key={i} />)}
+          </div>
+        ) : filtered.length === 0 ? (
           <div className="card flex flex-col items-center justify-center py-16 gap-3">
             <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center">
               <BellOff size={22} className="text-slate-400" />
@@ -200,15 +227,13 @@ export default function NotificationsPage() {
           </div>
         ) : (
           <div className="card overflow-hidden divide-y divide-slate-100">
-            {/* Header */}
             <div className="px-5 py-3 bg-slate-50 flex items-center justify-between">
               <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide flex items-center gap-2">
                 <Bell size={13} />
-                {filter === "all" ? "Semua Notifikasi" : FILTER_TABS.find(t => t.key === filter)?.label}
+                {filter === "all" ? "Semua Notifikasi" : FILTER_TABS.find((t) => t.key === filter)?.label}
               </p>
               <p className="text-xs text-slate-400 font-mono">{filtered.length} total</p>
             </div>
-
             {filtered.map((notif) => (
               <NotifItem
                 key={notif.id}

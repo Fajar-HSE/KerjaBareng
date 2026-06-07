@@ -65,13 +65,35 @@ export default function CreateTaskModal({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
-    // TODO: POST /api/tasks
-    // payload: { ...form, assignedToId: isUser ? selfId : form.assignedToId }
-    await new Promise((r) => setTimeout(r, 800));
-    setLoading(false);
-    setForm({ ...EMPTY_FORM });
-    onCreated?.();
-    handleClose();
+
+    try {
+      const payload = {
+        title:        form.title.trim(),
+        description:  form.description.trim() || undefined,
+        assignedToId: isUser ? selfId : form.assignedToId,
+        deadline:     form.deadline,
+        targetType:   form.targetType,
+      };
+
+      const res = await fetch("/api/tasks", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        console.error("[CREATE TASK]", data.error);
+      } else {
+        setForm({ ...EMPTY_FORM });
+        onCreated?.();
+        handleClose();
+      }
+    } catch (err) {
+      console.error("[CREATE TASK]", err);
+    } finally {
+      setLoading(false);
+    }
   }
 
   const canSubmit = form.title && form.deadline && (isUser ? !!selfId : !!form.assignedToId);
