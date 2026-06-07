@@ -1,4 +1,7 @@
+"use client";
+
 import AppShell from "@/components/layout/AppShell";
+import { useSession } from "next-auth/react";
 import {
   CheckSquare,
   Clock,
@@ -180,10 +183,14 @@ function ActivityFeed() {
 
 /* ─── Page ──────────────────────────────────────────────────── */
 export default function DashboardPage() {
+  const { data: session } = useSession();
+  const isAdmin  = session?.user?.role === "admin";
+  const userName = session?.user?.name ?? "Tim";
+
   return (
     <AppShell
       title="Dashboard"
-      subtitle="Ringkasan aktivitas tim hari ini"
+      subtitle={isAdmin ? "Ringkasan aktivitas tim hari ini" : `Selamat datang, ${userName.split(" ")[0]} 👋`}
     >
       <div className="flex flex-col gap-6 max-w-7xl">
         {/* Stat Cards */}

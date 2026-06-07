@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useSession } from "next-auth/react";
 import AppShell from "@/components/layout/AppShell";
 import CreateTaskModal from "@/components/tasks/CreateTaskModal";
 import TaskDetailDrawer from "@/components/tasks/TaskDetailDrawer";
@@ -177,7 +178,18 @@ export default function TasksPage() {
   const [createOpen, setCreateOpen]     = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
 
-  const filtered = MOCK_TASKS.filter((t) => {
+  const { data: session } = useSession();
+  const isAdmin   = session?.user?.role === "admin";
+  const userId    = session?.user?.id   ?? "";
+  const userName  = session?.user?.name ?? "User";
+  const userInitial = userName.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
+
+  /* User hanya lihat tugas miliknya, admin lihat semua */
+  const visibleTasks = isAdmin
+    ? MOCK_TASKS
+    : MOCK_TASKS.filter((t) => t.assignee === userName || t.id % 2 === 1); // simulasi filter by userId
+
+  const filtered = visibleTasks.filter((t) => {
     const matchTab    = activeTab === "all" || t.status === activeTab;
     const matchSearch = t.title.toLowerCase().includes(search.toLowerCase()) ||
                         t.assignee.toLowerCase().includes(search.toLowerCase());
@@ -185,18 +197,18 @@ export default function TasksPage() {
   });
 
   const counts: Record<string, number> = {
-    all:         MOCK_TASKS.length,
-    pending:     MOCK_TASKS.filter(t => t.status === "pending").length,
-    in_progress: MOCK_TASKS.filter(t => t.status === "in_progress").length,
-    done:        MOCK_TASKS.filter(t => t.status === "done").length,
-    overdue:     MOCK_TASKS.filter(t => t.status === "overdue").length,
+    all:         visibleTasks.length,
+    pending:     visibleTasks.filter(t => t.status === "pending").length,
+    in_progress: visibleTasks.filter(t => t.status === "in_progress").length,
+    done:        visibleTasks.filter(t => t.status === "done").length,
+    overdue:     visibleTasks.filter(t => t.status === "overdue").length,
   };
 
   return (
     <>
       <AppShell
         title="Tugas"
-        subtitle="Kelola dan pantau semua tugas tim"
+        subtitle={isAdmin ? "Kelola dan pantau semua tugas tim" : "Tugas yang ditugaskan kepadamu"}
         action={
           <button
             onClick={() => setCreateOpen(true)}
@@ -326,6 +338,12 @@ export default function TasksPage() {
         open={createOpen}
         onClose={() => setCreateOpen(false)}
         onCreated={() => {/* TODO: refresh data */}}
+        role={isAdmin ? "admin" : "user"}
+        currentUser={
+          !isAdmin
+            ? { id: userId, name: userName, initial: userInitial }
+            : undefined
+        }
       />
       <TaskDetailDrawer
         task={selectedTask}
