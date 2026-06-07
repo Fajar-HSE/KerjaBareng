@@ -494,9 +494,11 @@ export default function AnalyticsPage() {
   const [selectedMember, setSelectedMember] = useState<string | null>("BS");
 
   /* Personal stats (untuk user biasa) */
-  const myInitial = "BS"; // TODO: derive dari session
-  const myStats   = MEMBER_STATS[myInitial];
-  const myMember  = LEADERBOARD.find(m => m.initial === myInitial);
+  const userName = session?.user?.name || "Budi Santoso";
+  const myInitial = userName.split(" ").map((n) => n[0]).join("").toUpperCase().substring(0, 2) || "BS";
+  
+  const myStats   = MEMBER_STATS[myInitial] || { done: 0, pending: 0, overdue: 0, streak: 0, bestStreak: 0, avgDays: 0 };
+  const myMember  = LEADERBOARD.find(m => m.initial === myInitial) || { rank: 0, name: userName, initial: myInitial, done: 0, streak: 0, rate: 0 };
 
   return (
     <AppShell
