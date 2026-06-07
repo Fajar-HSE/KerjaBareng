@@ -1,22 +1,62 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { signIn } from "next-auth/react";
-import { useRouter } from "next/navigation";
-import { Eye, EyeOff, Briefcase, Loader2, AlertCircle } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Eye, EyeOff, Briefcase, Loader2, AlertCircle, ShieldAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+/* ─── Alert variants ─────────────────────────────────────────── */
+type AlertType = "error" | "warning" | "info";
+
+function Alert({ type, message }: { type: AlertType; message: string }) {
+  const styles: Record<AlertType, { bg: string; border: string; text: string; icon: React.ElementType }> = {
+    error:   { bg: "bg-red-50",    border: "border-red-200",    text: "text-red-600",    icon: AlertCircle },
+    warning: { bg: "bg-amber-50",  border: "border-amber-200",  text: "text-amber-700",  icon: ShieldAlert },
+    info:    { bg: "bg-[#e8f4f8]", border: "border-[#1a5f7a]/20", text: "text-[#1a5f7a]", icon: AlertCircle },
+  };
+  const s = styles[type];
+  const Icon = s.icon;
+
+  return (
+    <div className={cn("flex items-center gap-2 px-3 py-2.5 rounded-lg border text-sm", s.bg, s.border, s.text)}>
+      <Icon size={15} className="shrink-0" />
+      {message}
+    </div>
+  );
+}
+
+/* ─── Page ──────────────────────────────────────────────────── */
 export default function LoginPage() {
-  const router = useRouter();
-  const [email, setEmail] = useState("");
+  const router       = useRouter();
+  const searchParams = useSearchParams();
+
+  const [email,    setEmail]    = useState("");
   const [password, setPassword] = useState("");
   const [showPass, setShowPass] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [loading,  setLoading]  = useState(false);
+  const [error,    setError]    = useState("");
+  const [alert,    setAlert]    = useState<{ type: AlertType; message: string } | null>(null);
+
+  /* Baca query params dari middleware */
+  useEffect(() => {
+    const err      = searchParams.get("error");
+    const callbackUrl = searchParams.get("callbackUrl");
+
+    if (err === "unauthorized") {
+      setAlert({ type: "warning", message: "Kamu tidak punya akses ke halaman tersebut." });
+    } else if (err === "SessionRequired" || (callbackUrl && !err)) {
+      setAlert({ type: "info", message: "Silakan login terlebih dahulu." });
+    }
+  }, [searchParams]);
+
+  /* callbackUrl: kembalikan ke halaman yang dituju setelah login */
+  const callbackUrl = searchParams.get("callbackUrl") ?? "/dashboard";
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+    setAlert(null);
     setLoading(true);
 
     const res = await signIn("credentials", {
@@ -30,7 +70,7 @@ export default function LoginPage() {
     if (res?.error) {
       setError("Email atau password salah.");
     } else {
-      router.push("/dashboard");
+      router.push(callbackUrl);
       router.refresh();
     }
   }
@@ -38,7 +78,7 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen bg-[#f8fafc] flex items-center justify-center p-4">
       {/* Background decoration */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+      <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden>
         <div className="absolute -top-40 -right-40 w-96 h-96 rounded-full bg-[#1a5f7a]/5" />
         <div className="absolute -bottom-20 -left-20 w-72 h-72 rounded-full bg-[#d97706]/5" />
       </div>
@@ -55,14 +95,13 @@ export default function LoginPage() {
 
         {/* Card */}
         <div className="card p-6 shadow-card">
-          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-            {/* Error alert */}
-            {error && (
-              <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-red-50 border border-red-200 text-sm text-red-600">
-                <AlertCircle size={15} className="shrink-0" />
-                {error}
-              </div>
-            )}
+          <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
+
+            {/* Alert dari middleware (unauthorized / session required) */}
+            {alert && <Alert type={alert.type} message={alert.message} />}
+
+            {/* Error dari credentials */}
+            {error && <Alert type="error" message={error} />}
 
             {/* Email */}
             <div className="flex flex-col gap-1.5">
@@ -92,11 +131,7 @@ export default function LoginPage() {
                 <label className="text-sm font-medium text-slate-700" htmlFor="password">
                   Password
                 </label>
-                <button
-                  type="button"
-                  className="text-xs text-[#1a5f7a] hover:underline"
-                  tabIndex={-1}
-                >
+                <button type="button" className="text-xs text-[#1a5f7a] hover:underline" tabIndex={-1}>
                   Lupa password?
                 </button>
               </div>
@@ -137,14 +172,7 @@ export default function LoginPage() {
                 "disabled:opacity-60 disabled:cursor-not-allowed"
               )}
             >
-              {loading ? (
-                <>
-                  <Loader2 size={15} className="animate-spin" />
-                  Masuk...
-                </>
-              ) : (
-                "Masuk"
-              )}
+              {loading ? <><Loader2 size={15} className="animate-spin" />Masuk...</> : "Masuk"}
             </button>
           </form>
         </div>
