@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import {
   Eye, EyeOff, Briefcase, Loader2,
   AlertCircle, CheckCircle2, User, Mail, Lock,
@@ -32,8 +31,6 @@ const inputCls = cn(
 
 /* ─── Page ──────────────────────────────────────────────────── */
 export default function RegisterPage() {
-  const router = useRouter();
-
   const [form, setForm] = useState({ fullName: "", email: "", password: "", confirm: "" });
   const [showPw,    setShowPw]    = useState(false);
   const [showConf,  setShowConf]  = useState(false);
