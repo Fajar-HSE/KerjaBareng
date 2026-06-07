@@ -56,8 +56,12 @@ export default function LoginPage() {
     }
   }, [searchParams]);
 
-  /* callbackUrl: kembalikan ke halaman yang dituju setelah login */
-  const callbackUrl = searchParams.get("callbackUrl") ?? "/dashboard";
+  /* callbackUrl: validasi harus relative path (cegah open redirect) */
+  const rawCallback = searchParams.get("callbackUrl") ?? "/dashboard";
+  const callbackUrl =
+    rawCallback.startsWith("/") && !rawCallback.startsWith("//")
+      ? rawCallback
+      : "/dashboard";
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
