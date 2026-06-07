@@ -41,6 +41,8 @@ model Profile {
   emailVerified       Boolean   @default(false)
   emailVerifyToken    String?   @unique
   emailVerifyExpires  DateTime?
+  resetPasswordToken  String?   @unique
+  resetPasswordExpires DateTime?
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 

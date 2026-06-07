@@ -141,9 +141,9 @@ export default function LoginPage() {
                 <label className="text-sm font-medium text-slate-700" htmlFor="password">
                   Password
                 </label>
-                <button type="button" className="text-xs text-[#1a5f7a] hover:underline" tabIndex={-1}>
+                <Link href="/forgot-password" className="text-xs text-[#1a5f7a] hover:underline" tabIndex={-1}>
                   Lupa password?
-                </button>
+                </Link>
               </div>
               <div className="relative">
                 <input
