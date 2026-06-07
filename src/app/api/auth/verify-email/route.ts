@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { supabaseAdmin } from "@/lib/supabase";
 
 export async function GET(req: NextRequest) {
   const token = req.nextUrl.searchParams.get("token");
@@ -10,37 +10,37 @@ export async function GET(req: NextRequest) {
 
   try {
     /* Atomic update — cegah race condition dari double-click */
-    const updated = await prisma.profile.updateMany({
-      where: {
-        emailVerifyToken:   token,
-        emailVerifyExpires: { gt: new Date() },   // belum expired
-        emailVerified:      false,                 // belum terverifikasi
-      },
-      data: {
+    const { data: updated } = await supabaseAdmin
+      .from("Profile")
+      .update({
         emailVerified:      true,
         emailVerifyToken:   null,
         emailVerifyExpires: null,
-      },
-    });
+      })
+      .eq("emailVerifyToken", token)
+      .eq("emailVerified", false)
+      .gt("emailVerifyExpires", new Date().toISOString())
+      .select("id");
 
-    if (updated.count === 0) {
+    if (!updated || updated.length === 0) {
       /* Token tidak ditemukan atau sudah dipakai atau expired — bersihkan expired token */
-      await prisma.profile.updateMany({
-        where: {
-          emailVerifyToken:   token,
-          emailVerifyExpires: { lt: new Date() },
-        },
-        data: {
+      await supabaseAdmin
+        .from("Profile")
+        .update({
           emailVerifyToken:   null,
           emailVerifyExpires: null,
-        },
-      });
+        })
+        .eq("emailVerifyToken", token)
+        .lt("emailVerifyExpires", new Date().toISOString());
 
       /* Cek apakah user sudah terverifikasi (klik ulang link valid) */
-      const alreadyVerified = await prisma.profile.findFirst({
-        where: { emailVerified: true, emailVerifyToken: null },
-        select: { id: true },
-      });
+      const { data: alreadyVerified } = await supabaseAdmin
+        .from("Profile")
+        .select("id")
+        .eq("emailVerified", true)
+        .is("emailVerifyToken", null)
+        .limit(1)
+        .maybeSingle();
 
       if (alreadyVerified) {
         return NextResponse.redirect(new URL("/verify-email?success=true", req.url));

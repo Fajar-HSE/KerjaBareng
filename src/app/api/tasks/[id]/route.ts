@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma }      from "@/lib/prisma";
+import { supabaseAdmin } from "@/lib/supabase";
 import { requireAuth, isAuthSession } from "@/lib/api-auth";
-import { TaskStatus }  from "@prisma/client";
 
 type Params = { params: { id: string } };
 
@@ -10,30 +9,34 @@ export async function GET(_req: NextRequest, { params }: Params) {
   const auth = await requireAuth();
   if (!isAuthSession(auth)) return auth;
 
-  const task = await prisma.task.findUnique({
-    where:   { id: params.id },
-    include: {
-      assignedTo: { select: { id: true, fullName: true, avatarUrl: true, division: true } },
-      assignedBy: { select: { id: true, fullName: true } },
-      progresses: {
-        orderBy: { createdAt: "desc" },
-        include: { user: { select: { id: true, fullName: true, avatarUrl: true } } },
-      },
-      messages: {
-        orderBy: { createdAt: "asc" },
-        include: {
-          sender:   { select: { id: true, fullName: true, avatarUrl: true } },
-          receiver: { select: { id: true, fullName: true } },
-        },
-      },
-    },
-  });
+  const { data: task, error } = await supabaseAdmin
+    .from("Task")
+    .select(`
+      *,
+      assignedTo:Profile!assignedToId(id, fullName, avatarUrl, division),
+      assignedBy:Profile!assignedById(id, fullName),
+      progresses:TaskProgress(*, user:Profile!userId(id, fullName, avatarUrl)),
+      messages:ChatMessage(*, sender:Profile!senderId(id, fullName, avatarUrl), receiver:Profile!receiverId(id, fullName))
+    `)
+    .eq("id", params.id)
+    .single();
 
-  if (!task) return NextResponse.json({ error: "Task tidak ditemukan." }, { status: 404 });
+  if (error || !task) return NextResponse.json({ error: "Task tidak ditemukan." }, { status: 404 });
 
-  /* User hanya boleh lihat tugasnya sendiri */
   if (auth.user.role !== "admin" && task.assignedToId !== auth.user.id) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  interface SortableItem {
+    createdAt: string;
+  }
+
+  // Sort progresses and messages since nested ordering in Supabase JS is limited
+  if (task.progresses) {
+    (task.progresses as SortableItem[]).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }
+  if (task.messages) {
+    (task.messages as SortableItem[]).sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
   }
 
   return NextResponse.json(task);
@@ -44,10 +47,9 @@ export async function PUT(req: NextRequest, { params }: Params) {
   const auth = await requireAuth();
   if (!isAuthSession(auth)) return auth;
 
-  const task = await prisma.task.findUnique({ where: { id: params.id } });
+  const { data: task } = await supabaseAdmin.from("Task").select("id, assignedToId").eq("id", params.id).single();
   if (!task) return NextResponse.json({ error: "Task tidak ditemukan." }, { status: 404 });
 
-  /* Hanya admin atau assignee yang bisa update */
   const isAdmin  = auth.user.role === "admin";
   const isOwner  = task.assignedToId === auth.user.id;
   if (!isAdmin && !isOwner) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -56,31 +58,30 @@ export async function PUT(req: NextRequest, { params }: Params) {
     const body = await req.json();
     const { title, description, deadline, status, targetType } = body;
 
-    /* User biasa hanya boleh update status */
     const updateData = isAdmin
       ? {
           ...(title       ? { title: title.trim() }                          : {}),
           ...(description !== undefined ? { description }                    : {}),
-          ...(deadline    ? { deadline: new Date(deadline) }                 : {}),
-          ...(status      ? { status: status as TaskStatus }                 : {}),
+          ...(deadline    ? { deadline: new Date(deadline).toISOString() }   : {}),
+          ...(status      ? { status }                 : {}),
           ...(targetType  ? { targetType }                                   : {}),
         }
       : {
-          ...(status ? { status: status as TaskStatus } : {}),
+          ...(status ? { status } : {}),
         };
 
     if (Object.keys(updateData).length === 0) {
       return NextResponse.json({ error: "Tidak ada field yang diupdate." }, { status: 400 });
     }
 
-    const updated = await prisma.task.update({
-      where: { id: params.id },
-      data:  updateData,
-      include: {
-        assignedTo: { select: { id: true, fullName: true } },
-        assignedBy: { select: { id: true, fullName: true } },
-      },
-    });
+    const { data: updated, error: updateError } = await supabaseAdmin
+      .from("Task")
+      .update(updateData)
+      .eq("id", params.id)
+      .select("*, assignedTo:Profile!assignedToId(id, fullName), assignedBy:Profile!assignedById(id, fullName)")
+      .single();
+
+    if (updateError || !updated) throw updateError;
 
     return NextResponse.json(updated);
   } catch (err) {
@@ -98,9 +99,9 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const task = await prisma.task.findUnique({ where: { id: params.id } });
+  const { data: task } = await supabaseAdmin.from("Task").select("id").eq("id", params.id).single();
   if (!task) return NextResponse.json({ error: "Task tidak ditemukan." }, { status: 404 });
 
-  await prisma.task.delete({ where: { id: params.id } });
+  await supabaseAdmin.from("Task").delete().eq("id", params.id);
   return NextResponse.json({ message: "Task berhasil dihapus." });
 }

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
-import { prisma } from "@/lib/prisma";
+import { supabaseAdmin } from "@/lib/supabase";
 import { rateLimit, getClientIp } from "@/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
@@ -33,19 +33,19 @@ export async function POST(req: NextRequest) {
     }
 
     /* Atomic update — cegah race condition */
-    const updated = await prisma.profile.updateMany({
-      where: {
-        resetPasswordToken:   token,
-        resetPasswordExpires: { gt: new Date() }, // belum expired
-      },
-      data: {
-        passwordHash:         await bcrypt.hash(password, 12),
+    const passwordHash = await bcrypt.hash(password, 12);
+    const { data: updated } = await supabaseAdmin
+      .from("Profile")
+      .update({
+        passwordHash,
         resetPasswordToken:   null,
         resetPasswordExpires: null,
-      },
-    });
+      })
+      .eq("resetPasswordToken", token)
+      .gt("resetPasswordExpires", new Date().toISOString())
+      .select("id");
 
-    if (updated.count === 0) {
+    if (!updated || updated.length === 0) {
       /* Token tidak ditemukan / sudah expired / sudah dipakai */
       return NextResponse.json(
         { error: "Token tidak valid atau sudah kadaluarsa." },
@@ -68,13 +68,13 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ valid: false, error: "Token tidak valid." }, { status: 400 });
   }
 
-  const user = await prisma.profile.findFirst({
-    where: {
-      resetPasswordToken:   token,
-      resetPasswordExpires: { gt: new Date() },
-    },
-    select: { id: true },
-  });
+  const { data: user } = await supabaseAdmin
+      .from("Profile")
+      .select("id")
+      .eq("resetPasswordToken", token)
+      .gt("resetPasswordExpires", new Date().toISOString())
+      .limit(1)
+      .maybeSingle();
 
   if (!user) {
     return NextResponse.json({ valid: false, error: "Token tidak valid atau sudah kadaluarsa." }, { status: 400 });

@@ -1,7 +1,7 @@
 import { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
-import { prisma } from "./prisma";
+import { supabaseAdmin } from "./supabase";
 
 export const authOptions: NextAuthOptions = {
   session: {
@@ -22,17 +22,11 @@ export const authOptions: NextAuthOptions = {
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null;
 
-        const user = await prisma.profile.findUnique({
-          where: { email: credentials.email },
-          select: {
-            id:            true,
-            email:         true,
-            fullName:      true,
-            passwordHash:  true,
-            role:          true,
-            emailVerified: true,
-          },
-        });
+        const { data: user } = await supabaseAdmin
+          .from("Profile")
+          .select("id, email, fullName, passwordHash, role, emailVerified")
+          .eq("email", credentials.email)
+          .single();
 
         if (!user) return null;
 

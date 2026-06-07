@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
-import { prisma }    from "@/lib/prisma";
+import { supabaseAdmin } from "@/lib/supabase";
 import { requireAuth, isAuthSession } from "@/lib/api-auth";
 
 /* ─── GET /api/profile ───────────────────────────────────────── */
@@ -8,18 +8,11 @@ export async function GET() {
   const auth = await requireAuth();
   if (!isAuthSession(auth)) return auth;
 
-  const user = await prisma.profile.findUnique({
-    where:  { id: auth.user.id },
-    select: {
-      id:        true,
-      fullName:  true,
-      email:     true,
-      role:      true,
-      division:  true,
-      avatarUrl: true,
-      createdAt: true,
-    },
-  });
+  const { data: user } = await supabaseAdmin
+    .from("Profile")
+    .select("id, fullName, email, role, division, avatarUrl, createdAt")
+    .eq("id", auth.user.id)
+    .single();
 
   if (!user) return NextResponse.json({ error: "User tidak ditemukan." }, { status: 404 });
   return NextResponse.json(user);
@@ -36,7 +29,6 @@ export async function PATCH(req: NextRequest) {
 
     const updateData: Record<string, unknown> = {};
 
-    /* Update nama / divisi */
     if (fullName !== undefined) {
       const name = String(fullName).trim();
       if (!name || name.length > 100) {
@@ -49,7 +41,6 @@ export async function PATCH(req: NextRequest) {
       updateData.division = division ? String(division).trim() : null;
     }
 
-    /* Update password */
     if (newPassword !== undefined) {
       if (!currentPassword) {
         return NextResponse.json({ error: "Password saat ini wajib diisi." }, { status: 400 });
@@ -58,10 +49,11 @@ export async function PATCH(req: NextRequest) {
         return NextResponse.json({ error: "Password baru harus 8–72 karakter." }, { status: 400 });
       }
 
-      const user = await prisma.profile.findUnique({
-        where:  { id: auth.user.id },
-        select: { passwordHash: true },
-      });
+      const { data: user } = await supabaseAdmin
+        .from("Profile")
+        .select("passwordHash")
+        .eq("id", auth.user.id)
+        .single();
 
       if (!user) return NextResponse.json({ error: "User tidak ditemukan." }, { status: 404 });
 
@@ -77,11 +69,14 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: "Tidak ada perubahan." }, { status: 400 });
     }
 
-    const updated = await prisma.profile.update({
-      where:  { id: auth.user.id },
-      data:   updateData,
-      select: { id: true, fullName: true, email: true, role: true, division: true, avatarUrl: true },
-    });
+    const { data: updated, error: updateError } = await supabaseAdmin
+      .from("Profile")
+      .update(updateData)
+      .eq("id", auth.user.id)
+      .select("id, fullName, email, role, division, avatarUrl")
+      .single();
+
+    if (updateError || !updated) throw updateError;
 
     return NextResponse.json(updated);
   } catch (err) {

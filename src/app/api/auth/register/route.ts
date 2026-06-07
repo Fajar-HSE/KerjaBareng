@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
-import { prisma } from "@/lib/prisma";
+import { supabaseAdmin } from "@/lib/supabase";
 import { sendVerificationEmail } from "@/lib/mailer";
 import { rateLimit, getClientIp } from "@/lib/rate-limit";
 
@@ -65,10 +65,11 @@ export async function POST(req: NextRequest) {
      * Selalu return 200 dengan pesan generik agar attacker tidak bisa enumerate
      * email valid melalui perbedaan response.
      * ─────────────────────────────────────────────────────────────── */
-    const existing = await prisma.profile.findUnique({
-      where:  { email },
-      select: { id: true, emailVerified: true },
-    });
+    const { data: existing } = await supabaseAdmin
+      .from("Profile")
+      .select("id, emailVerified")
+      .eq("email", email)
+      .maybeSingle();
 
     if (existing) {
       /* Kirim email "sudah terdaftar" secara silent — user yang legitimate
@@ -94,17 +95,21 @@ export async function POST(req: NextRequest) {
     const verifyExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
     /* ── Simpan ke DB ── */
-    const user = await prisma.profile.create({
-      data: {
+    const { data: user, error: createError } = await supabaseAdmin
+      .from("Profile")
+      .insert({
         fullName,
         email,
         passwordHash,
         role:               "user",
         emailVerifyToken:   verifyToken,
-        emailVerifyExpires: verifyExpires,
+        emailVerifyExpires: verifyExpires.toISOString(),
         emailVerified:      false,
-      },
-    });
+      })
+      .select()
+      .single();
+
+    if (createError || !user) throw createError;
 
     /* ── Kirim email verifikasi ── */
     await sendVerificationEmail({

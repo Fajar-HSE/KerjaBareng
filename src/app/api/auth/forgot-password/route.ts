@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
-import { prisma } from "@/lib/prisma";
+import { supabaseAdmin } from "@/lib/supabase";
 import { rateLimit, getClientIp } from "@/lib/rate-limit";
 import { transporter } from "@/lib/mailer";
 
@@ -27,19 +27,20 @@ export async function POST(req: NextRequest) {
     const normalizedEmail = email.toLowerCase().trim();
 
     /* Anti-enumeration: selalu return 200 */
-    const user = await prisma.profile.findUnique({
-      where:  { email: normalizedEmail },
-      select: { id: true, fullName: true, email: true },
-    });
+    const { data: user } = await supabaseAdmin
+      .from("Profile")
+      .select("id, fullName, email")
+      .eq("email", normalizedEmail)
+      .maybeSingle();
 
     if (user) {
       const token   = crypto.randomBytes(32).toString("hex");
       const expires = new Date(Date.now() + RESET_EXPIRES_HOURS * 60 * 60 * 1000);
 
-      await prisma.profile.update({
-        where: { id: user.id },
-        data:  { resetPasswordToken: token, resetPasswordExpires: expires },
-      });
+      await supabaseAdmin
+        .from("Profile")
+        .update({ resetPasswordToken: token, resetPasswordExpires: expires.toISOString() })
+        .eq("id", user.id);
 
       const baseUrl  = process.env.NEXTAUTH_URL ?? "http://localhost:3000";
       const resetUrl = `${baseUrl}/reset-password?token=${token}`;

@@ -482,9 +482,9 @@ function SystemSection() {
   const sysInfo = {
     version:    "1.0.0",
     nextjs:     "14.2.35",
-    prisma:     "5.22.0",
+    supabase:   "2.x (REST API)",
     node:       process.env.NODE_ENV === "production" ? "production" : "development",
-    database:   "PostgreSQL 15",
+    database:   "Supabase PostgreSQL",
     buildDate:  new Date().toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" }),
   };
 
@@ -501,7 +501,7 @@ function SystemSection() {
           {Object.entries({
             "Versi App":    sysInfo.version,
             "Next.js":      sysInfo.nextjs,
-            "Prisma":       sysInfo.prisma,
+            "Supabase":     sysInfo.supabase,
             "Environment":  sysInfo.node,
             "Database":     sysInfo.database,
             "Build Date":   sysInfo.buildDate,

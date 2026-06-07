@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma }      from "@/lib/prisma";
+import { supabaseAdmin } from "@/lib/supabase";
 import { requireAuth, isAuthSession } from "@/lib/api-auth";
 
 /* ─── GET /api/notifications ────────────────────────────────── */
@@ -9,20 +9,26 @@ export async function GET(req: NextRequest) {
 
   const unreadOnly = req.nextUrl.searchParams.get("unread") === "true";
 
-  const notifications = await prisma.notification.findMany({
-    where: {
-      userId: auth.user.id,
-      ...(unreadOnly ? { isRead: false } : {}),
-    },
-    orderBy: { createdAt: "desc" },
-    take: 50,
-  });
+  let query = supabaseAdmin
+    .from("Notification")
+    .select("*")
+    .eq("userId", auth.user.id)
+    .order("createdAt", { ascending: false })
+    .limit(50);
 
-  const unreadCount = await prisma.notification.count({
-    where: { userId: auth.user.id, isRead: false },
-  });
+  if (unreadOnly) {
+    query = query.eq("isRead", false);
+  }
 
-  return NextResponse.json({ notifications, unreadCount });
+  const { data: notifications } = await query;
+
+  const { count: unreadCount } = await supabaseAdmin
+    .from("Notification")
+    .select("*", { count: "exact", head: true })
+    .eq("userId", auth.user.id)
+    .eq("isRead", false);
+
+  return NextResponse.json({ notifications: notifications || [], unreadCount: unreadCount || 0 });
 }
 
 /* ─── PATCH /api/notifications — mark all read ───────────────── */
@@ -34,17 +40,17 @@ export async function PATCH(req: NextRequest) {
   const { id } = body as { id?: string };
 
   if (id) {
-    /* Mark single */
-    await prisma.notification.updateMany({
-      where: { id, userId: auth.user.id },
-      data:  { isRead: true },
-    });
+    await supabaseAdmin
+      .from("Notification")
+      .update({ isRead: true })
+      .eq("id", id)
+      .eq("userId", auth.user.id);
   } else {
-    /* Mark all */
-    await prisma.notification.updateMany({
-      where: { userId: auth.user.id, isRead: false },
-      data:  { isRead: true },
-    });
+    await supabaseAdmin
+      .from("Notification")
+      .update({ isRead: true })
+      .eq("userId", auth.user.id)
+      .eq("isRead", false);
   }
 
   return NextResponse.json({ success: true });
@@ -58,9 +64,11 @@ export async function DELETE(req: NextRequest) {
   const id = req.nextUrl.searchParams.get("id");
   if (!id) return NextResponse.json({ error: "ID wajib diisi." }, { status: 400 });
 
-  await prisma.notification.deleteMany({
-    where: { id, userId: auth.user.id },
-  });
+  await supabaseAdmin
+    .from("Notification")
+    .delete()
+    .eq("id", id)
+    .eq("userId", auth.user.id);
 
   return NextResponse.json({ success: true });
 }

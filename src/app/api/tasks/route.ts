@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma }      from "@/lib/prisma";
+import { supabaseAdmin } from "@/lib/supabase";
 import { requireAuth, isAuthSession } from "@/lib/api-auth";
-import { TaskStatus, TargetType }     from "@prisma/client";
 
 /* ─── GET /api/tasks ─────────────────────────────────────────── */
 export async function GET(req: NextRequest) {
@@ -9,42 +8,54 @@ export async function GET(req: NextRequest) {
   if (!isAuthSession(auth)) return auth;
 
   const { searchParams } = req.nextUrl;
-  const status     = searchParams.get("status")   as TaskStatus | null;
+  const status     = searchParams.get("status");
   const assignedTo = searchParams.get("assignedTo");
   const search     = searchParams.get("search");
   const page       = Math.max(1, Number(searchParams.get("page") ?? 1));
   const limit      = Math.min(50, Math.max(1, Number(searchParams.get("limit") ?? 20)));
 
-  /* User hanya lihat tugasnya sendiri; admin lihat semua */
   const isAdmin    = auth.user.role === "admin";
   const userId     = auth.user.id;
 
-  const where = {
-    ...(isAdmin ? {} : { assignedToId: userId }),
-    ...(assignedTo && isAdmin ? { assignedToId: assignedTo } : {}),
-    ...(status ? { status } : {}),
-    ...(search ? {
-      OR: [
-        { title:       { contains: search, mode: "insensitive" as const } },
-        { description: { contains: search, mode: "insensitive" as const } },
-      ],
-    } : {}),
-  };
+  let query = supabaseAdmin
+    .from("Task")
+    .select("*, assignedTo:Profile!assignedToId(id, fullName, avatarUrl), assignedBy:Profile!assignedById(id, fullName), progresses:TaskProgress(count)", { count: "exact" });
 
-  const [tasks, total] = await Promise.all([
-    prisma.task.findMany({
-      where,
-      orderBy: [{ status: "asc" }, { deadline: "asc" }],
-      skip:    (page - 1) * limit,
-      take:    limit,
-      include: {
-        assignedTo: { select: { id: true, fullName: true, avatarUrl: true } },
-        assignedBy: { select: { id: true, fullName: true } },
-        _count:     { select: { progresses: true } },
-      },
-    }),
-    prisma.task.count({ where }),
-  ]);
+  if (!isAdmin) {
+    query = query.eq("assignedToId", userId);
+  } else if (assignedTo) {
+    query = query.eq("assignedToId", assignedTo);
+  }
+
+  if (status) {
+    query = query.eq("status", status);
+  }
+
+  if (search) {
+    query = query.or(`title.ilike.%${search}%,description.ilike.%${search}%`);
+  }
+
+  const { data: tasksData, count, error } = await query
+    .order("status", { ascending: true })
+    .order("deadline", { ascending: true })
+    .range((page - 1) * limit, page * limit - 1);
+
+  if (error) {
+    console.error("Supabase error:", error);
+    return NextResponse.json({ error: "Gagal mengambil data tugas." }, { status: 500 });
+  }
+
+  interface SupabaseTask {
+    progresses?: Array<{ count: number }> | null;
+    [key: string]: unknown;
+  }
+
+  const tasks = (tasksData as SupabaseTask[] | null)?.map((t) => ({
+    ...t,
+    _count: { progresses: t.progresses?.[0]?.count || 0 },
+  })) || [];
+
+  const total = count || 0;
 
   return NextResponse.json({
     tasks,
@@ -61,7 +72,6 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { title, description, assignedToId, deadline, targetType } = body;
 
-    /* Validasi */
     if (!title?.trim())    return NextResponse.json({ error: "Judul wajib diisi." },       { status: 400 });
     if (!assignedToId)     return NextResponse.json({ error: "Assignee wajib dipilih." },   { status: 400 });
     if (!deadline)         return NextResponse.json({ error: "Deadline wajib diisi." },     { status: 400 });
@@ -71,42 +81,39 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Format deadline tidak valid." }, { status: 400 });
     }
 
-    /* User hanya boleh assign ke diri sendiri */
     const isAdmin = auth.user.role === "admin";
     const finalAssignee = isAdmin ? assignedToId : auth.user.id;
 
-    /* Cek assignee exists */
-    const assignee = await prisma.profile.findUnique({
-      where:  { id: finalAssignee },
-      select: { id: true },
-    });
+    const { data: assignee } = await supabaseAdmin
+      .from("Profile")
+      .select("id")
+      .eq("id", finalAssignee)
+      .single();
+
     if (!assignee) return NextResponse.json({ error: "Assignee tidak ditemukan." }, { status: 404 });
 
-    const task = await prisma.task.create({
-      data: {
+    const { data: task, error: createError } = await supabaseAdmin
+      .from("Task")
+      .insert({
         title:       title.trim(),
         description: description?.trim() ?? null,
         assignedToId: finalAssignee,
         assignedById: auth.user.id,
-        deadline:    deadlineDate,
-        targetType:  (targetType as TargetType) ?? TargetType.daily,
+        deadline:    deadlineDate.toISOString(),
+        targetType:  targetType ?? "daily",
         status:      "pending",
-      },
-      include: {
-        assignedTo: { select: { id: true, fullName: true } },
-        assignedBy: { select: { id: true, fullName: true } },
-      },
-    });
+      })
+      .select("*, assignedTo:Profile!assignedToId(id, fullName), assignedBy:Profile!assignedById(id, fullName)")
+      .single();
 
-    /* Buat notifikasi untuk assignee */
+    if (createError || !task) throw createError;
+
     if (finalAssignee !== auth.user.id) {
-      await prisma.notification.create({
-        data: {
-          userId:  finalAssignee,
-          title:   "Tugas Baru Ditugaskan",
-          message: `${auth.user.name} menugaskan "${task.title}" kepadamu.`,
-          type:    "assignment",
-        },
+      await supabaseAdmin.from("Notification").insert({
+        userId:  finalAssignee,
+        title:   "Tugas Baru Ditugaskan",
+        message: `${auth.user.name} menugaskan "${task.title}" kepadamu.`,
+        type:    "assignment",
       });
     }
 

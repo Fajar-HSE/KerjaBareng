@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { prisma }       from "@/lib/prisma";
+import { supabaseAdmin } from "@/lib/supabase";
 
 /* ─── GET /api/health ────────────────────────────────────────── */
 export async function GET() {
@@ -7,18 +7,26 @@ export async function GET() {
 
   let dbStatus = "ok";
   let dbLatency = 0;
+  let dbError: string | null = null;
 
   try {
     const dbStart = Date.now();
-    await prisma.$queryRaw`SELECT 1`;
+    const { error } = await supabaseAdmin.from("Profile").select("id").limit(1);
+    if (error) {
+      dbError = `${error.code}: ${error.message}`;
+      throw error;
+    }
     dbLatency = Date.now() - dbStart;
-  } catch {
+  } catch (err: unknown) {
     dbStatus = "error";
+    if (!dbError && err instanceof Error) dbError = err.message;
   }
 
   const totalLatency = Date.now() - start;
-
   const status = dbStatus === "ok" ? 200 : 503;
+
+  // Log ke server console agar bisa dilihat di terminal
+  if (dbError) console.error("[health] DB error:", dbError);
 
   return NextResponse.json(
     {
@@ -27,7 +35,7 @@ export async function GET() {
       uptime:    process.uptime(),
       latency:   { total: totalLatency, db: dbLatency },
       services: {
-        database: { status: dbStatus, latencyMs: dbLatency },
+        database: { status: dbStatus, latencyMs: dbLatency, error: dbError },
         api:      { status: "ok" },
       },
     },
