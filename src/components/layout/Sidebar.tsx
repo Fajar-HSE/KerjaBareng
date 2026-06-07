@@ -134,25 +134,32 @@ export default function Sidebar() {
         collapsed ? "flex justify-center" : ""
       )}>
         {collapsed ? (
-          <div
-            className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 cursor-pointer"
+          <Link
+            href="/profile"
+            className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
             style={{ backgroundColor: isAdmin ? "#d97706" : "#1a5f7a" }}
-            title={userName}
+            title={`${userName} — Lihat profil`}
           >
             <span className="text-xs font-semibold text-white">{userInitial}</span>
-          </div>
+          </Link>
         ) : (
           <div className="flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-slate-800 transition-colors group">
-            <div
-              className="w-8 h-8 rounded-full flex items-center justify-center shrink-0"
-              style={{ backgroundColor: isAdmin ? "#d97706" : "#1a5f7a" }}
+            <Link
+              href="/profile"
+              className="flex items-center gap-2 flex-1 min-w-0"
+              title="Lihat profil"
             >
-              <span className="text-xs font-semibold text-white">{userInitial}</span>
-            </div>
-            <div className="flex flex-col min-w-0 flex-1">
-              <span className="text-sm font-medium text-slate-200 truncate">{userName}</span>
-              <span className="text-xs text-slate-500 truncate">{userEmail}</span>
-            </div>
+              <div
+                className="w-8 h-8 rounded-full flex items-center justify-center shrink-0"
+                style={{ backgroundColor: isAdmin ? "#d97706" : "#1a5f7a" }}
+              >
+                <span className="text-xs font-semibold text-white">{userInitial}</span>
+              </div>
+              <div className="flex flex-col min-w-0">
+                <span className="text-sm font-medium text-slate-200 truncate">{userName}</span>
+                <span className="text-xs text-slate-500 truncate">{userEmail}</span>
+              </div>
+            </Link>
             <button
               onClick={() => signOut({ callbackUrl: "/login" })}
               className="opacity-0 group-hover:opacity-100 p-1 rounded text-slate-500 hover:text-red-400 hover:bg-red-400/10 transition-all shrink-0"
