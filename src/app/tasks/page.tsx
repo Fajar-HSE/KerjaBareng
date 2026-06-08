@@ -36,25 +36,29 @@ interface TasksResponse {
 
 /* ─── UI Task type (untuk drawer) ───────────────────────────── */
 export interface Task {
-  id:             number;
-  title:          string;
-  description:    string;
-  assignee:       string;
+  id:              number;
+  rawId?:          string; // UUID asli dari API
+  title:           string;
+  description:     string;
+  assignee:        string;
   assigneeInitial: string;
-  status:         Status;
-  priority:       "high" | "medium" | "low";
-  deadline:       string;
-  targetType:     "daily" | "weekly";
-  tags:           string[];
+  assigneeId?:     string;
+  status:          Status;
+  priority:        "high" | "medium" | "low";
+  deadline:        string;
+  targetType:      "daily" | "weekly";
+  tags:            string[];
 }
 
 function apiTaskToUiTask(t: ApiTask): Task {
   return {
     id:              parseInt(t.id.replace(/-/g, "").slice(0, 8), 16) || 0,
+    rawId:           t.id,
     title:           t.title,
     description:     t.description ?? "",
     assignee:        t.assignedTo.fullName,
     assigneeInitial: t.assignedTo.fullName.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase(),
+    assigneeId:      t.assignedTo.id,
     status:          t.status,
     priority:        "medium",
     deadline:        t.deadline,
@@ -363,7 +367,7 @@ export default function TasksPage() {
         role={isAdmin ? "admin" : "user"}
         currentUser={!isAdmin ? { id: userId, name: userName, initial: userInitial } : undefined}
       />
-      <TaskDetailDrawer task={selectedTask} onClose={() => setSelectedTask(null)} />
+      <TaskDetailDrawer task={selectedTask} onClose={() => setSelectedTask(null)} onUpdated={refetch} />
     </>
   );
 }

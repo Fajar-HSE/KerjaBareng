@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Bell, Search, Plus, ChevronDown } from "lucide-react";
 import Link from "next/link";
+import { useSession } from "next-auth/react";
 import { cn } from "@/lib/utils";
 
 /* ─── Notification dot ──────────────────────────────────────── */
@@ -44,6 +45,106 @@ function SearchBar() {
   );
 }
 
+/* ─── User Avatar ────────────────────────────────────────────── */
+function UserAvatar() {
+  const { data: session } = useSession();
+  const [open, setOpen]   = useState(false);
+
+  const userName    = session?.user?.name  ?? "User";
+  const userEmail   = session?.user?.email ?? "";
+  const isAdmin     = session?.user?.role  === "admin";
+  const userInitial = userName.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
+  const avatarColor = isAdmin ? "#d97706" : "#1a5f7a";
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-2 pl-2 border-l border-slate-200 ml-1 hover:opacity-80 transition-opacity"
+        aria-label="Menu pengguna"
+      >
+        <div
+          className="w-8 h-8 rounded-full flex items-center justify-center shrink-0"
+          style={{ backgroundColor: avatarColor }}
+        >
+          <span className="text-xs font-semibold text-white">{userInitial}</span>
+        </div>
+        <div className="hidden sm:flex flex-col items-start leading-none max-w-[120px]">
+          <span className="text-xs font-medium text-slate-700 truncate w-full">{userName}</span>
+          <span className={cn(
+            "text-[10px] font-medium mt-0.5",
+            isAdmin ? "text-amber-500" : "text-slate-400"
+          )}>
+            {isAdmin ? "Admin" : "Member"}
+          </span>
+        </div>
+        <ChevronDown size={14} className="text-slate-400 hidden sm:block" />
+      </button>
+
+      {/* Dropdown */}
+      {open && (
+        <>
+          <div className="fixed inset-0 z-20" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 top-11 z-30 w-52 bg-white border border-slate-200 rounded-lg shadow-lg py-1 text-sm">
+            {/* User info */}
+            <div className="px-4 py-3 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div
+                  className="w-9 h-9 rounded-full flex items-center justify-center shrink-0"
+                  style={{ backgroundColor: avatarColor }}
+                >
+                  <span className="text-xs font-bold text-white">{userInitial}</span>
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-slate-800 truncate">{userName}</p>
+                  <p className="text-xs text-slate-400 truncate">{userEmail}</p>
+                </div>
+              </div>
+              <span className={cn(
+                "inline-flex items-center mt-2 text-[10px] font-semibold px-2 py-0.5 rounded-full",
+                isAdmin
+                  ? "bg-amber-100 text-amber-700"
+                  : "bg-[#e8f4f8] text-[#1a5f7a]"
+              )}>
+                {isAdmin ? "● Admin" : "● Member"}
+              </span>
+            </div>
+
+            {/* Menu items */}
+            <Link
+              href="/profile"
+              onClick={() => setOpen(false)}
+              className="flex items-center gap-2.5 px-4 py-2.5 text-slate-700 hover:bg-slate-50 transition-colors"
+            >
+              Profil Saya
+            </Link>
+            {isAdmin && (
+              <Link
+                href="/admin/settings"
+                onClick={() => setOpen(false)}
+                className="flex items-center gap-2.5 px-4 py-2.5 text-slate-700 hover:bg-slate-50 transition-colors"
+              >
+                Pengaturan
+              </Link>
+            )}
+            <div className="border-t border-slate-100 my-1" />
+            <button
+              onClick={async () => {
+                setOpen(false);
+                const { signOut } = await import("next-auth/react");
+                signOut({ callbackUrl: "/login" });
+              }}
+              className="w-full flex items-center gap-2.5 px-4 py-2.5 text-red-500 hover:bg-red-50 transition-colors text-left"
+            >
+              Keluar
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 /* ─── Page Title (slot) ─────────────────────────────────────── */
 export interface HeaderProps {
   title?: string;
@@ -74,7 +175,6 @@ export default function Header({ title = "Dashboard", subtitle, action }: Header
       {/* Right: actions */}
       <div className="flex items-center gap-2 shrink-0">
         <SearchBar />
-
         <NotifBell />
 
         {/* Optional action slot */}
@@ -85,13 +185,7 @@ export default function Header({ title = "Dashboard", subtitle, action }: Header
           </button>
         )}
 
-        {/* User avatar shortcut */}
-        <button className="flex items-center gap-2 pl-2 border-l border-slate-200 ml-1">
-          <div className="w-8 h-8 rounded-full bg-[#1a5f7a] flex items-center justify-center">
-            <span className="text-xs font-semibold text-white">AD</span>
-          </div>
-          <ChevronDown size={14} className="text-slate-400" />
-        </button>
+        <UserAvatar />
       </div>
     </header>
   );

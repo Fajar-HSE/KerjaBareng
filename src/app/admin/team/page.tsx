@@ -89,11 +89,12 @@ const inputCls = cn(
 );
 
 function InviteModal({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const [loading, setLoading] = useState(false);
-  const [emails, setEmails]   = useState<string[]>([]);
-  const [input, setInput]     = useState("");
-  const [role, setRole]       = useState<Role>("user");
+  const [loading, setLoading]   = useState(false);
+  const [emails, setEmails]     = useState<string[]>([]);
+  const [input, setInput]       = useState("");
+  const [role, setRole]         = useState<Role>("user");
   const [division, setDivision] = useState("");
+  const [result, setResult]     = useState<{ success: boolean; message: string } | null>(null);
 
   function addEmail() {
     const trimmed = input.trim();
@@ -111,11 +112,25 @@ function InviteModal({ open, onClose }: { open: boolean; onClose: () => void }) 
     e.preventDefault();
     if (emails.length === 0) return;
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 900));
-    setLoading(false);
-    setEmails([]);
-    setInput("");
-    onClose();
+    setResult(null);
+    try {
+      const res  = await fetch("/api/admin/invite", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ emails, role, division: division || undefined }),
+      });
+      const data = await res.json();
+      setResult({ success: res.ok, message: data.message ?? data.error ?? "Terjadi kesalahan." });
+      if (res.ok) {
+        setEmails([]);
+        setInput("");
+        setTimeout(() => { setResult(null); onClose(); }, 2500);
+      }
+    } catch {
+      setResult({ success: false, message: "Gagal terhubung ke server." });
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -205,6 +220,22 @@ function InviteModal({ open, onClose }: { open: boolean; onClose: () => void }) 
             {DIVISIONS.map((d) => <option key={d} value={d}>{d}</option>)}
           </select>
         </div>
+
+        {/* Result feedback */}
+        {result && (
+          <div className={cn(
+            "flex items-center gap-2 px-3 py-2.5 rounded-lg border text-sm",
+            result.success
+              ? "bg-emerald-50 border-emerald-200 text-emerald-700"
+              : "bg-red-50 border-red-200 text-red-600"
+          )}>
+            {result.success
+              ? <CheckCircle2 size={14} className="shrink-0" />
+              : <AlertTriangle size={14} className="shrink-0" />
+            }
+            {result.message}
+          </div>
+        )}
 
         {/* Actions */}
         <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">

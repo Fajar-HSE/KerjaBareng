@@ -31,9 +31,11 @@ function ResetContent() {
   const router       = useRouter();
   const searchParams = useSearchParams();
   const token        = searchParams.get("token") ?? "";
+  const isInvite     = searchParams.get("invite") === "1";
 
   type PageState = "validating" | "valid" | "invalid" | "success";
   const [pageState, setPageState] = useState<PageState>("validating");
+  const [source,    setSource]    = useState<"reset" | "invite">("reset");
 
   const [password, setPassword]   = useState("");
   const [confirm,  setConfirm]    = useState("");
@@ -51,9 +53,16 @@ function ResetContent() {
 
     fetch(`/api/auth/reset-password?token=${encodeURIComponent(token)}`)
       .then((r) => r.json())
-      .then((d) => setPageState(d.valid ? "valid" : "invalid"))
+      .then((d) => {
+        if (d.valid) {
+          setPageState("valid");
+          setSource(d.source ?? (isInvite ? "invite" : "reset"));
+        } else {
+          setPageState("invalid");
+        }
+      })
       .catch(() => setPageState("invalid"));
-  }, [token]);
+  }, [token, isInvite]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -76,8 +85,8 @@ function ResetContent() {
         setError(data.error ?? "Terjadi kesalahan.");
       } else {
         setPageState("success");
-        /* Auto redirect ke login setelah 3 detik */
-        setTimeout(() => router.push("/login?verified=success"), 3000);
+        setSource(data.source ?? source);
+        setTimeout(() => router.push("/login"), 3000);
       }
     } catch {
       setError("Tidak dapat terhubung ke server.");
@@ -106,12 +115,16 @@ function ResetContent() {
         <div>
           <p className="font-semibold text-slate-900">Link Tidak Valid</p>
           <p className="text-sm text-slate-500 mt-1 leading-relaxed">
-            Link reset password tidak ditemukan atau sudah kadaluarsa (1 jam).
+            {isInvite
+              ? "Link aktivasi tidak ditemukan atau sudah kadaluarsa (7 hari). Minta admin untuk mengirim ulang undangan."
+              : "Link reset password tidak ditemukan atau sudah kadaluarsa (1 jam)."}
           </p>
         </div>
-        <Link href="/forgot-password" className="btn btn-primary h-10 px-6 rounded-lg text-sm">
-          Minta Link Baru
-        </Link>
+        {!isInvite && (
+          <Link href="/forgot-password" className="btn btn-primary h-10 px-6 rounded-lg text-sm">
+            Minta Link Baru
+          </Link>
+        )}
       </div>
     );
   }
@@ -124,7 +137,9 @@ function ResetContent() {
           <CheckCircle2 size={32} className="text-emerald-600" />
         </div>
         <div>
-          <p className="font-semibold text-slate-900">Password Berhasil Diubah!</p>
+          <p className="font-semibold text-slate-900">
+            {source === "invite" ? "Akun Berhasil Diaktifkan! 🎉" : "Password Berhasil Diubah!"}
+          </p>
           <p className="text-sm text-slate-500 mt-1">
             Kamu akan diarahkan ke halaman login dalam 3 detik...
           </p>
@@ -139,6 +154,15 @@ function ResetContent() {
   /* ── Form ── */
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
+      {/* Judul kontekstual — di dalam Suspense boundary, aman dari hydration mismatch */}
+      <div className="text-center mb-1">
+        <p className="text-sm font-medium text-slate-600">
+          {source === "invite"
+            ? "🎉 Buat password untuk mengaktifkan akunmu"
+            : "Masukkan password baru untuk akunmu"}
+        </p>
+      </div>
+
       {error && (
         <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-red-50 border border-red-200 text-sm text-red-600">
           <AlertCircle size={15} className="shrink-0" />
