@@ -1,12 +1,14 @@
 "use client";
 
+import { useState } from "react";
 import { useSession } from "next-auth/react";
 import AppShell from "@/components/layout/AppShell";
 import { useApi } from "@/hooks/useApi";
 import { StatCardSkeleton } from "@/components/ui/Skeleton";
+import CreateTaskModal from "@/components/tasks/CreateTaskModal";
 import {
   CheckSquare, Clock, TrendingUp, AlertTriangle,
-  ArrowUpRight, MoreHorizontal, RefreshCw,
+  ArrowUpRight, MoreHorizontal, RefreshCw, Plus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -226,17 +228,31 @@ export default function DashboardPage() {
   const { data: session } = useSession();
   const isAdmin  = session?.user?.role === "admin";
   const userName = session?.user?.name ?? "Tim";
+  const userId   = session?.user?.id   ?? "";
+  const userInitial = userName.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
 
   const { data, loading, error, refetch } = useApi<DashboardData>("/api/dashboard");
 
+  const [createOpen, setCreateOpen] = useState(false);
+
   return (
-    <AppShell
-      title="Dashboard"
-      subtitle={isAdmin
-        ? "Ringkasan aktivitas tim hari ini"
-        : `Selamat datang, ${userName.split(" ")[0]} 👋`
-      }
-    >
+    <>
+      <AppShell
+        title="Dashboard"
+        subtitle={isAdmin
+          ? "Ringkasan aktivitas tim hari ini"
+          : `Selamat datang, ${userName.split(" ")[0]} 👋`
+        }
+        action={
+          <button
+            onClick={() => setCreateOpen(true)}
+            className="btn btn-primary gap-1.5 h-9 px-3 text-sm rounded-lg"
+          >
+            <Plus size={16} />
+            <span className="hidden sm:inline">Buat Tugas</span>
+          </button>
+        }
+      >
       <div className="flex flex-col gap-6 max-w-7xl">
 
         {/* Error */}
@@ -289,5 +305,14 @@ export default function DashboardPage() {
         </div>
       </div>
     </AppShell>
+
+      <CreateTaskModal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onCreated={refetch}
+        role={isAdmin ? "admin" : "user"}
+        currentUser={!isAdmin ? { id: userId, name: userName, initial: userInitial } : undefined}
+      />
+    </>
   );
 }
