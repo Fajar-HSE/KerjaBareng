@@ -108,20 +108,26 @@ export async function POST(req: NextRequest) {
     const { data: task, error: createError } = await supabaseAdmin
       .from("Task")
       .insert({
-        title:       title.trim(),
-        description: description?.trim() ?? null,
+        title:        title.trim(),
+        description:  description?.trim() ?? null,
         assignedToId: finalAssignee,
         assignedById: auth.user.id,
-        deadline:    deadlineDate.toISOString(),
-        targetType:  targetType ?? "daily",
-        status:      "pending",
-        priority:    finalPriority,
-        tags:        finalTags,
+        deadline:     deadlineDate.toISOString(),
+        targetType:   targetType ?? "daily",
+        status:       "pending",
+        priority:     finalPriority,
+        ...(finalTags.length > 0 ? { tags: finalTags } : {}),
       })
       .select("*, assignedTo:Profile!assignedToId(id, fullName), assignedBy:Profile!assignedById(id, fullName)")
       .single();
 
-    if (createError || !task) throw createError;
+    if (createError || !task) {
+      console.error("[POST /api/tasks] createError:", createError);
+      return NextResponse.json(
+        { error: createError?.message ?? "Gagal membuat tugas." },
+        { status: 500 }
+      );
+    }
 
     if (finalAssignee !== auth.user.id) {
       await supabaseAdmin.from("Notification").insert({

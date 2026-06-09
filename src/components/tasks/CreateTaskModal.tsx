@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Modal from "@/components/ui/Modal";
-import { Loader2, User, Lock } from "lucide-react";
+import { Loader2, User, Lock, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface CreateTaskModalProps {
@@ -74,14 +74,18 @@ export default function CreateTaskModal({
     setForm((f) => ({ ...f, [field]: value }));
   }
 
+  const [submitError, setSubmitError] = useState("");
+
   function handleClose() {
     setForm({ ...EMPTY_FORM });
+    setSubmitError("");
     onClose();
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
+    setSubmitError("");
 
     try {
       const payload = {
@@ -104,14 +108,15 @@ export default function CreateTaskModal({
 
       const data = await res.json();
       if (!res.ok) {
-        console.error("[CREATE TASK]", data.error);
+        setSubmitError(data.error ?? "Gagal membuat tugas. Coba lagi.");
       } else {
         setForm({ ...EMPTY_FORM });
+        setSubmitError("");
         onCreated?.();
         handleClose();
       }
-    } catch (err) {
-      console.error("[CREATE TASK]", err);
+    } catch {
+      setSubmitError("Gagal terhubung ke server.");
     } finally {
       setLoading(false);
     }
@@ -296,6 +301,14 @@ export default function CreateTaskModal({
             className={inputCls}
           />
         </div>
+
+        {/* ── Error ── */}
+        {submitError && (
+          <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-red-50 border border-red-200 text-sm text-red-600">
+            <AlertTriangle size={14} className="shrink-0" />
+            {submitError}
+          </div>
+        )}
 
         {/* ── Actions ── */}
         <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 mt-1">
