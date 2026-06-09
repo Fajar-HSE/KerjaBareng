@@ -18,11 +18,11 @@ export async function GET() {
     let q = supabaseAdmin.from("Task").select("*", { count: "exact", head: true });
     if (!isAdmin) q = q.eq("assignedToId", userId);
     if (status) q = q.eq("status", status);
-    /* Filter task yang status-nya "done" DAN di-update hari ini */
     if (completedToday) {
-      q = q.eq("status", "done").gte("updatedAt", todayStart).lte("updatedAt", todayEnd);
+      q = q.eq("status", "done").gte("createdAt", todayStart).lte("createdAt", todayEnd);
     }
-    const { count } = await q;
+    const { count, error } = await q;
+    if (error) console.error("[dashboard getTaskCount]", status, error);
     return count || 0;
   };
 
@@ -30,10 +30,11 @@ export async function GET() {
     let q = supabaseAdmin
       .from("Task")
       .select("*, assignedTo:Profile!assignedToId(id, fullName, avatarUrl)")
-      .order("updatedAt", { ascending: false })
+      .order("createdAt", { ascending: false })
       .limit(8);
     if (!isAdmin) q = q.eq("assignedToId", userId);
-    const { data } = await q;
+    const { data, error } = await q;
+    if (error) console.error("[dashboard getRecentTasks]", error);
     return data || [];
   };
 

@@ -9,20 +9,36 @@ export async function GET() {
   const auth = await requireAdmin();
   if (!isAuthSession(auth)) return auth;
 
-  const { data: users, error } = await supabaseAdmin
+  /* Coba dengan isActive, fallback tanpa isActive jika kolom belum ada */
+  let users: Record<string, unknown>[] | null = null;
+  let hasIsActive = true;
+
+  const { data: withActive, error: err1 } = await supabaseAdmin
     .from("Profile")
     .select("id, fullName, email, role, division, avatarUrl, emailVerified, isActive, createdAt, updatedAt")
     .order("fullName", { ascending: true });
 
-  if (error) {
-    console.error("[GET /api/admin/users]", error);
-    return NextResponse.json({ error: "Gagal mengambil data anggota." }, { status: 500 });
+  if (err1) {
+    /* isActive mungkin belum ada — coba tanpa kolom itu */
+    hasIsActive = false;
+    const { data: withoutActive, error: err2 } = await supabaseAdmin
+      .from("Profile")
+      .select("id, fullName, email, role, division, avatarUrl, emailVerified, createdAt, updatedAt")
+      .order("fullName", { ascending: true });
+
+    if (err2) {
+      console.error("[GET /api/admin/users]", err2);
+      return NextResponse.json({ error: "Gagal mengambil data anggota." }, { status: 500 });
+    }
+    users = (withoutActive as Record<string, unknown>[]) || [];
+  } else {
+    users = (withActive as Record<string, unknown>[]) || [];
   }
 
-  const userIds = (users || []).map((u) => u.id);
+  const userIds = (users || []).map((u) => u.id as string);
 
   /* Ambil task stats per user dalam satu query */
-  let statsMap: Record<string, { done: number; pending: number; overdue: number }> = {};
+  const statsMap: Record<string, { done: number; pending: number; overdue: number }> = {};
   if (userIds.length > 0) {
     const { data: tasks } = await supabaseAdmin
       .from("Task")
@@ -41,15 +57,15 @@ export async function GET() {
 
   const result = (users || []).map((u) => ({
     ...u,
-    status: u.isActive === false ? "inactive" : "active",
+    status: hasIsActive && u.isActive === false ? "inactive" : "active",
     stats: {
-      done:    statsMap[u.id]?.done    ?? 0,
-      pending: statsMap[u.id]?.pending ?? 0,
-      overdue: statsMap[u.id]?.overdue ?? 0,
-      streak:  0, // streak requires additional computation; placeholder
+      done:    (statsMap as Record<string, { done: number; pending: number; overdue: number }>)[u.id as string]?.done    ?? 0,
+      pending: (statsMap as Record<string, { done: number; pending: number; overdue: number }>)[u.id as string]?.pending ?? 0,
+      overdue: (statsMap as Record<string, { done: number; pending: number; overdue: number }>)[u.id as string]?.overdue ?? 0,
+      streak:  0,
     },
     lastActive: u.updatedAt
-      ? new Date(u.updatedAt).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })
+      ? new Date(u.updatedAt as string).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })
       : "—",
   }));
 
@@ -102,7 +118,10 @@ export async function PATCH(req: NextRequest) {
     }
 
     if (isActive !== undefined) {
-      updateData.isActive = Boolean(isActive);
+      /* Hanya update isActive jika kolom ada di DB */
+      try {
+        updateData.isActive = Boolean(isActive);
+      } catch { /* kolom tidak ada, skip */ }
     }
 
     if (Object.keys(updateData).length === 0) {
