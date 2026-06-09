@@ -5,9 +5,9 @@ import { useSession } from "next-auth/react";
 import Drawer from "@/components/ui/Drawer";
 import {
   Calendar, User, Tag, Clock, CheckCircle2,
-  AlertTriangle, Circle, Paperclip, Send,
+  AlertTriangle, Circle, Send,
   ChevronDown, Edit2, Trash2, Loader2,
-  RefreshCw, X, Check,
+  X, Check,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -307,7 +307,6 @@ export default function TaskDetailDrawer({ task, onClose, onUpdated }: TaskDetai
   const isOwner       = session?.user?.id === task.assigneeId;
   const isOwnerOrAdmin = isAdmin || isOwner;
 
-  const s = STATUS_CONFIG[currentStatus];
   const p = PRIORITY_CONFIG[task.priority];
 
   function handleStatusChange(newStatus: Status) {

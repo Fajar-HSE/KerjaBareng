@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { title, description, assignedToId, deadline, targetType } = body;
+    const { title, description, assignedToId, deadline, targetType, priority, tags } = body;
 
     if (!title?.trim())    return NextResponse.json({ error: "Judul wajib diisi." },       { status: 400 });
     if (!assignedToId)     return NextResponse.json({ error: "Assignee wajib dipilih." },   { status: 400 });
@@ -79,6 +79,19 @@ export async function POST(req: NextRequest) {
     const deadlineDate = new Date(deadline);
     if (isNaN(deadlineDate.getTime())) {
       return NextResponse.json({ error: "Format deadline tidak valid." }, { status: 400 });
+    }
+
+    const VALID_PRIORITIES = ["high", "medium", "low"];
+    const finalPriority = VALID_PRIORITIES.includes(priority) ? priority : "medium";
+
+    /* Sanitasi tags: pastikan array of string, max 10 item, masing-masing max 50 karakter */
+    let finalTags: string[] = [];
+    if (Array.isArray(tags)) {
+      finalTags = tags
+        .map((t: unknown) => String(t ?? "").trim())
+        .filter((t) => t.length > 0)
+        .slice(0, 10)
+        .map((t) => t.slice(0, 50));
     }
 
     const isAdmin = auth.user.role === "admin";
@@ -102,6 +115,8 @@ export async function POST(req: NextRequest) {
         deadline:    deadlineDate.toISOString(),
         targetType:  targetType ?? "daily",
         status:      "pending",
+        priority:    finalPriority,
+        tags:        finalTags,
       })
       .select("*, assignedTo:Profile!assignedToId(id, fullName), assignedBy:Profile!assignedById(id, fullName)")
       .single();

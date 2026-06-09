@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import AppShell from "@/components/layout/AppShell";
 import Modal from "@/components/ui/Modal";
 import {
@@ -13,69 +13,21 @@ import {
 import { cn } from "@/lib/utils";
 
 /* ═══════════════════════════════════════════════════════════════
-   TYPES & MOCK DATA
+   TYPES
 ═══════════════════════════════════════════════════════════════ */
 type Role   = "admin" | "user";
-type Status = "active" | "inactive";
 
 interface Member {
   id: string;
   fullName: string;
   email: string;
-  phone?: string;
   division?: string;
   role: Role;
-  status: Status;
+  emailVerified: boolean;
   avatarInitial: string;
-  joinedAt: string;
-  lastActive: string;
-  stats: { done: number; pending: number; overdue: number; streak: number };
+  createdAt: string;
 }
 
-const MOCK_MEMBERS: Member[] = [
-  {
-    id: "1", fullName: "Admin User",    email: "admin@kerjabareng.com", phone: "08111111111", division: "Engineering",
-    role: "admin", status: "active",  avatarInitial: "AD",
-    joinedAt: "2025-01-01", lastActive: "Hari ini",
-    stats: { done: 52, pending: 2, overdue: 0, streak: 21 },
-  },
-  {
-    id: "2", fullName: "Budi Santoso",  email: "budi@kerjabareng.com",  phone: "08122222222", division: "Design",
-    role: "user",  status: "active",  avatarInitial: "BS",
-    joinedAt: "2025-01-15", lastActive: "Hari ini",
-    stats: { done: 42, pending: 3, overdue: 1, streak: 14 },
-  },
-  {
-    id: "3", fullName: "Citra Ayu",     email: "citra@kerjabareng.com", phone: "08133333333", division: "Backend",
-    role: "user",  status: "active",  avatarInitial: "CA",
-    joinedAt: "2025-01-15", lastActive: "1 jam lalu",
-    stats: { done: 38, pending: 5, overdue: 2, streak: 11 },
-  },
-  {
-    id: "4", fullName: "Deni Ramadhan", email: "deni@kerjabareng.com",  phone: "08144444444", division: "Backend",
-    role: "user",  status: "active",  avatarInitial: "DR",
-    joinedAt: "2025-02-01", lastActive: "3 jam lalu",
-    stats: { done: 35, pending: 2, overdue: 1, streak: 9 },
-  },
-  {
-    id: "5", fullName: "Eka Mulyani",   email: "eka@kerjabareng.com",   phone: "08155555555", division: "QA",
-    role: "user",  status: "active",  avatarInitial: "EM",
-    joinedAt: "2025-02-10", lastActive: "Kemarin",
-    stats: { done: 29, pending: 6, overdue: 4, streak: 6 },
-  },
-  {
-    id: "6", fullName: "Fajar Laksono", email: "fajar@kerjabareng.com", phone: "08166666666", division: "DevOps",
-    role: "user",  status: "active",  avatarInitial: "FL",
-    joinedAt: "2025-02-15", lastActive: "Kemarin",
-    stats: { done: 27, pending: 4, overdue: 2, streak: 8 },
-  },
-  {
-    id: "7", fullName: "Gina Safitri",  email: "gina@kerjabareng.com",  phone: "08177777777", division: "Design",
-    role: "user",  status: "inactive", avatarInitial: "GS",
-    joinedAt: "2025-03-01", lastActive: "5 hari lalu",
-    stats: { done: 24, pending: 7, overdue: 3, streak: 0 },
-  },
-];
 
 const DIVISIONS = ["Engineering", "Design", "Backend", "Frontend", "QA", "DevOps", "Product", "Marketing"];
 
@@ -256,12 +208,19 @@ function InviteModal({ open, onClose }: { open: boolean; onClose: () => void }) 
 /* ═══════════════════════════════════════════════════════════════
    EDIT MEMBER MODAL
 ═══════════════════════════════════════════════════════════════ */
-function EditMemberModal({ member, onClose }: { member: Member | null; onClose: () => void }) {
+function EditMemberModal({
+  member,
+  onClose,
+  onUpdated,
+}: {
+  member: Member | null;
+  onClose: () => void;
+  onUpdated: (m: Member) => void;
+}) {
   const [loading, setLoading] = useState(false);
+  const [error, setError]     = useState("");
   const [form, setForm] = useState({
     fullName: member?.fullName ?? "",
-    email:    member?.email    ?? "",
-    phone:    member?.phone    ?? "",
     division: member?.division ?? "",
     role:     member?.role     ?? "user" as Role,
   });
@@ -274,10 +233,37 @@ function EditMemberModal({ member, onClose }: { member: Member | null; onClose: 
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    setError("");
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 700));
-    setLoading(false);
-    onClose();
+    try {
+      const res = await fetch(`/api/admin/users?id=${member!.id}`, {
+        method:  "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({
+          fullName: form.fullName,
+          role:     form.role,
+          division: form.division || null,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error ?? "Gagal menyimpan.");
+        return;
+      }
+      /* Merge data yg diperbarui ke local state */
+      onUpdated({
+        ...member!,
+        fullName:      data.fullName,
+        role:          data.role,
+        division:      data.division ?? undefined,
+        avatarInitial: data.fullName.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase(),
+      });
+      onClose();
+    } catch {
+      setError("Terjadi kesalahan jaringan.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -289,22 +275,17 @@ function EditMemberModal({ member, onClose }: { member: Member | null; onClose: 
         </div>
         <div className="flex flex-col gap-1.5">
           <label className="text-sm font-medium text-slate-700">Email</label>
-          <input type="email" value={form.email} onChange={(e) => set("email", e.target.value)} className={inputCls} />
+          <input type="email" value={member.email} disabled className={cn(inputCls, "opacity-60 cursor-not-allowed")} />
+          <p className="text-xs text-slate-400">Email tidak dapat diubah.</p>
         </div>
-        <div className="grid grid-cols-2 gap-4">
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-slate-700">No. HP</label>
-            <input type="tel" value={form.phone} onChange={(e) => set("phone", e.target.value)} className={inputCls} placeholder="081xxxxxxxxx" />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-slate-700">Divisi</label>
-            <select value={form.division} onChange={(e) => set("division", e.target.value)} className={inputCls}>
-              <option value="">Pilih divisi...</option>
-              {DIVISIONS.map((d) => <option key={d} value={d}>{d}</option>)}
-            </select>
-          </div>
+        <div className="flex flex-col gap-1.5">
+          <label className="text-sm font-medium text-slate-700">Divisi</label>
+          <select value={form.division} onChange={(e) => set("division", e.target.value)} className={inputCls}>
+            <option value="">Pilih divisi...</option>
+            {DIVISIONS.map((d) => <option key={d} value={d}>{d}</option>)}
+          </select>
         </div>
-        {/* Role — tidak boleh downgrade diri sendiri */}
+        {/* Role */}
         <div className="flex flex-col gap-1.5">
           <label className="text-sm font-medium text-slate-700">Role</label>
           <div className="grid grid-cols-2 gap-2">
@@ -322,6 +303,11 @@ function EditMemberModal({ member, onClose }: { member: Member | null; onClose: 
             ))}
           </div>
         </div>
+        {error && (
+          <p className="text-xs text-red-500 flex items-center gap-1">
+            <AlertTriangle size={11} /> {error}
+          </p>
+        )}
         <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
           <button type="button" onClick={onClose} className="btn btn-secondary h-9 px-4 text-sm rounded-lg">Batal</button>
           <button type="submit" disabled={loading} className="btn btn-primary h-9 px-4 text-sm rounded-lg disabled:opacity-50">
@@ -682,7 +668,9 @@ function ConfirmDeleteModal({ member, onConfirm, onClose }: {
    PAGE
 ═══════════════════════════════════════════════════════════════ */
 export default function TeamPage() {
-  const [members, setMembers]       = useState<Member[]>(MOCK_MEMBERS);
+  const [members, setMembers]       = useState<Member[]>([]);
+  const [loading, setLoading]       = useState(true);
+  const [fetchError, setFetchError] = useState("");
   const [search, setSearch]         = useState("");
   const [roleFilter, setRoleFilter] = useState<"all" | Role>("all");
   const [divFilter, setDivFilter]   = useState("all");
@@ -692,6 +680,28 @@ export default function TeamPage() {
   const [editTarget, setEditTarget]   = useState<Member | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Member | null>(null);
   const [resetTarget, setResetTarget]   = useState<Member | null>(null);
+
+  /* ── Fetch dari API ── */
+  function fetchMembers() {
+    setLoading(true);
+    setFetchError("");
+    fetch("/api/admin/users")
+      .then((r) => r.json())
+      .then((data) => {
+        if (Array.isArray(data)) {
+          setMembers(data.map((u) => ({
+            ...u,
+            avatarInitial: (u.fullName || "").split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase(),
+          })));
+        } else {
+          setFetchError(data.error ?? "Gagal memuat data anggota.");
+        }
+      })
+      .catch(() => setFetchError("Gagal terhubung ke server."))
+      .finally(() => setLoading(false));
+  }
+
+  useEffect(() => { fetchMembers(); }, []);
 
   /* ── Filter ── */
   const allDivisions = Array.from(new Set(members.map((m) => m.division).filter(Boolean))) as string[];
@@ -705,18 +715,23 @@ export default function TeamPage() {
   });
 
   /* ── Handlers ── */
-  function toggleStatus(id: string) {
-    setMembers((prev) => prev.map((m) => m.id === id ? { ...m, status: m.status === "active" ? "inactive" : "active" } : m));
+  async function deleteMember(id: string) {
+    const res = await fetch(`/api/admin/users?id=${id}`, { method: "DELETE" });
+    if (res.ok) {
+      setMembers((prev) => prev.filter((m) => m.id !== id));
+    } else {
+      const data = await res.json();
+      alert(data.error ?? "Gagal menghapus anggota.");
+    }
   }
 
-  function deleteMember(id: string) {
-    setMembers((prev) => prev.filter((m) => m.id !== id));
+  function updateMember(updated: Member) {
+    setMembers((prev) => prev.map((m) => m.id === updated.id ? updated : m));
   }
 
   /* ── Summary stats ── */
-  const totalActive   = members.filter((m) => m.status === "active").length;
   const totalAdmin    = members.filter((m) => m.role === "admin").length;
-  const totalInactive = members.filter((m) => m.status === "inactive").length;
+  const totalVerified = members.filter((m) => m.emailVerified).length;
 
   return (
     <>
@@ -732,12 +747,21 @@ export default function TeamPage() {
       >
         <div className="flex flex-col gap-5 max-w-7xl">
 
+          {/* ── Error / Loading ── */}
+          {fetchError && (
+            <div className="flex items-center gap-3 px-4 py-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-600">
+              <AlertTriangle size={15} className="shrink-0" />
+              <span className="flex-1">{fetchError}</span>
+              <button onClick={fetchMembers} className="font-medium hover:underline">Coba Lagi</button>
+            </div>
+          )}
+
           {/* ── Summary bar ── */}
           <div className="grid grid-cols-3 sm:grid-cols-3 gap-4">
             {[
               { label: "Total Anggota", value: members.length, icon: User,      color: "text-[#1a5f7a] bg-[#e8f4f8]" },
-              { label: "Aktif",          value: totalActive,    icon: UserCheck, color: "text-emerald-600 bg-emerald-50" },
-              { label: "Admin",          value: totalAdmin,     icon: Shield,    color: "text-amber-600 bg-amber-50" },
+              { label: "Terverifikasi", value: totalVerified,  icon: UserCheck, color: "text-emerald-600 bg-emerald-50" },
+              { label: "Admin",         value: totalAdmin,     icon: Shield,    color: "text-amber-600 bg-amber-50" },
             ].map(({ label, value, icon: Icon, color }) => (
               <div key={label} className="card px-5 py-4 flex items-center gap-4">
                 <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center shrink-0", color.split(" ")[1])}>
@@ -809,16 +833,13 @@ export default function TeamPage() {
             </div>
           </div>
 
-          {/* ── Inactive warning ── */}
-          {totalInactive > 0 && (
-            <div className="flex items-center gap-2.5 px-4 py-2.5 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-700">
-              <AlertTriangle size={15} className="shrink-0" />
-              <span>{totalInactive} anggota nonaktif. Aktifkan kembali atau hapus jika tidak diperlukan.</span>
-            </div>
-          )}
-
           {/* ── Content ── */}
-          {filtered.length === 0 ? (
+          {loading ? (
+            <div className="card flex items-center justify-center py-20 gap-2 text-slate-400">
+              <Loader2 size={20} className="animate-spin" />
+              <span className="text-sm">Memuat data anggota...</span>
+            </div>
+          ) : filtered.length === 0 ? (
             <div className="card flex flex-col items-center justify-center py-20 gap-3">
               <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center">
                 <User size={22} className="text-slate-400" />
@@ -877,8 +898,8 @@ export default function TeamPage() {
       </AppShell>
 
       {/* Modals */}
-      <InviteModal open={inviteOpen} onClose={() => setInviteOpen(false)} />
-      <EditMemberModal member={editTarget} onClose={() => setEditTarget(null)} />
+      <InviteModal open={inviteOpen} onClose={() => { setInviteOpen(false); fetchMembers(); }} />
+      <EditMemberModal member={editTarget} onClose={() => setEditTarget(null)} onUpdated={updateMember} />
       <ConfirmDeleteModal
         member={deleteTarget}
         onConfirm={() => deleteTarget && deleteMember(deleteTarget.id)}

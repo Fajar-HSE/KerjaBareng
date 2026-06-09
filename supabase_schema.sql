@@ -29,8 +29,10 @@ CREATE TABLE "Task" (
     "assignedToId" UUID NOT NULL REFERENCES "Profile"("id") ON DELETE CASCADE,
     "assignedById" UUID NOT NULL REFERENCES "Profile"("id") ON DELETE CASCADE,
     "status" TEXT DEFAULT 'pending' NOT NULL,
+    "priority" TEXT DEFAULT 'medium' NOT NULL,
     "deadline" TIMESTAMP WITH TIME ZONE NOT NULL,
     "targetType" TEXT DEFAULT 'daily' NOT NULL,
+    "tags" TEXT[] DEFAULT '{}'::TEXT[] NOT NULL,
     "createdAt" TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
     "updatedAt" TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL
 );
@@ -76,3 +78,10 @@ ALTER TABLE "Task" DISABLE ROW LEVEL SECURITY;
 ALTER TABLE "TaskProgress" DISABLE ROW LEVEL SECURITY;
 ALTER TABLE "ChatMessage" DISABLE ROW LEVEL SECURITY;
 ALTER TABLE "Notification" DISABLE ROW LEVEL SECURITY;
+
+-- =====================================================================
+-- MIGRATION: Jalankan query di bawah ini di Supabase SQL Editor
+-- jika tabel "Task" sudah ada sebelumnya (untuk database yang sudah berjalan)
+-- =====================================================================
+-- ALTER TABLE "Task" ADD COLUMN IF NOT EXISTS "priority" TEXT DEFAULT 'medium' NOT NULL;
+-- ALTER TABLE "Task" ADD COLUMN IF NOT EXISTS "tags" TEXT[] DEFAULT '{}'::TEXT[] NOT NULL;

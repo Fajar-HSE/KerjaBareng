@@ -22,8 +22,10 @@ interface ApiTask {
   title:       string;
   description: string | null;
   status:      Status;
+  priority:    "high" | "medium" | "low";
   deadline:    string;
   targetType:  "daily" | "weekly";
+  tags:        string[];
   assignedTo:  { id: string; fullName: string; avatarUrl: string | null };
   assignedBy:  { id: string; fullName: string };
   _count:      { progresses: number };
@@ -60,10 +62,10 @@ function apiTaskToUiTask(t: ApiTask): Task {
     assigneeInitial: t.assignedTo.fullName.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase(),
     assigneeId:      t.assignedTo.id,
     status:          t.status,
-    priority:        "medium",
+    priority:        t.priority ?? "medium",
     deadline:        t.deadline,
     targetType:      t.targetType,
-    tags:            [],
+    tags:            t.tags ?? [],
   };
 }
 

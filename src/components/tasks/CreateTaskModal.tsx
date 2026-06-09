@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Modal from "@/components/ui/Modal";
 import { Loader2, User, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -15,14 +15,14 @@ interface CreateTaskModalProps {
   currentUser?: { id: string; name: string; initial: string };
 }
 
-const ALL_MEMBERS = [
-  { id: "1", name: "Budi Santoso",   initial: "BS" },
-  { id: "2", name: "Citra Ayu",      initial: "CA" },
-  { id: "3", name: "Deni Ramadhan",  initial: "DR" },
-  { id: "4", name: "Eka Mulyani",    initial: "EM" },
-  { id: "5", name: "Fajar Laksono",  initial: "FL" },
-  { id: "6", name: "Gina Safitri",   initial: "GS" },
-];
+interface DbUser {
+  id: string;
+  fullName: string;
+}
+
+function getInitial(name: string) {
+  return (name || "").split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase();
+}
 
 const inputCls = cn(
   "w-full px-3 py-2.5 rounded-lg border border-slate-200 text-sm outline-none",
@@ -49,6 +49,23 @@ export default function CreateTaskModal({
 }: CreateTaskModalProps) {
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({ ...EMPTY_FORM });
+  const [members, setMembers] = useState<DbUser[]>([]);
+  const [loadingMembers, setLoadingMembers] = useState(false);
+
+  useEffect(() => {
+    if (open && role === "admin") {
+      setLoadingMembers(true);
+      fetch("/api/users")
+        .then((res) => res.json())
+        .then((data) => {
+          if (Array.isArray(data)) {
+            setMembers(data);
+          }
+        })
+        .catch((err) => console.error("Gagal memuat user:", err))
+        .finally(() => setLoadingMembers(false));
+    }
+  }, [open, role]);
 
   const isUser     = role === "user";
   const selfId     = currentUser?.id ?? "";
@@ -73,6 +90,10 @@ export default function CreateTaskModal({
         assignedToId: isUser ? selfId : form.assignedToId,
         deadline:     form.deadline,
         targetType:   form.targetType,
+        priority:     form.priority,
+        tags:         form.tags
+          ? form.tags.split(",").map((t) => t.trim()).filter(Boolean)
+          : [],
       };
 
       const res = await fetch("/api/tasks", {
@@ -175,27 +196,36 @@ export default function CreateTaskModal({
           ) : (
             /* Admin mode — pilih dari semua anggota */
             <div className="flex flex-wrap gap-2">
-              {ALL_MEMBERS.map((m) => (
-                <button
-                  key={m.id}
-                  type="button"
-                  onClick={() => set("assignedToId", m.id)}
-                  className={cn(
-                    "flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm transition-all",
-                    form.assignedToId === m.id
-                      ? "border-[#1a5f7a] bg-[#e8f4f8] text-[#1a5f7a] font-medium"
-                      : "border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50"
-                  )}
-                >
-                  <div className={cn(
-                    "w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold",
-                    form.assignedToId === m.id ? "bg-[#1a5f7a] text-white" : "bg-slate-200 text-slate-600"
-                  )}>
-                    {m.initial}
-                  </div>
-                  {m.name.split(" ")[0]}
-                </button>
-              ))}
+              {loadingMembers ? (
+                <div className="flex items-center gap-1.5 py-1 text-slate-400 text-xs">
+                  <Loader2 size={12} className="animate-spin" />
+                  <span>Memuat anggota tim...</span>
+                </div>
+              ) : members.length === 0 ? (
+                <p className="text-xs text-slate-400">Tidak ada anggota tim ditemukan.</p>
+              ) : (
+                members.map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => set("assignedToId", m.id)}
+                    className={cn(
+                      "flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm transition-all",
+                      form.assignedToId === m.id
+                        ? "border-[#1a5f7a] bg-[#e8f4f8] text-[#1a5f7a] font-medium"
+                        : "border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50"
+                    )}
+                  >
+                    <div className={cn(
+                      "w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold",
+                      form.assignedToId === m.id ? "bg-[#1a5f7a] text-white" : "bg-slate-200 text-slate-600"
+                    )}>
+                      {getInitial(m.fullName)}
+                    </div>
+                    {m.fullName.split(" ")[0]}
+                  </button>
+                ))
+              )}
             </div>
           )}
         </div>
