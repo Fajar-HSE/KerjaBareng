@@ -16,8 +16,7 @@ type Status   = "pending" | "in_progress" | "done" | "overdue";
 type Priority = "high" | "medium" | "low";
 
 export interface Task {
-  id:              number;
-  rawId?:          string; // UUID dari API
+  id:              string; // UUID langsung dari API
   title:           string;
   description:     string;
   assignee:        string;
@@ -290,16 +289,16 @@ export default function TaskDetailDrawer({ task, onClose, onUpdated }: TaskDetai
 
   // Fetch progresses dari API saat task dibuka
   useEffect(() => {
-    if (!task?.rawId) return;
+    if (!task?.id) return;
     setLoadingProgress(true);
-    fetch(`/api/tasks/${task.rawId}`)
+    fetch(`/api/tasks/${task.id}`)
       .then((r) => r.json())
       .then((data) => {
         if (data.progresses) setProgresses(data.progresses);
       })
       .catch(console.error)
       .finally(() => setLoadingProgress(false));
-  }, [task?.rawId]);
+  }, [task?.id]);
 
   if (!task) return <Drawer open={false} onClose={onClose}>{null}</Drawer>;
 
@@ -324,11 +323,11 @@ export default function TaskDetailDrawer({ task, onClose, onUpdated }: TaskDetai
   }
 
   async function handleSendComment() {
-    if (!comment.trim() || !task.rawId) return;
+    if (!comment.trim() || !task.id) return;
     setSendingComment(true);
     // Komentar dikirim sebagai progress note (tanpa isChecklist)
     try {
-      const res = await fetch(`/api/tasks/${task.rawId}/progress`, {
+      const res = await fetch(`/api/tasks/${task.id}/progress`, {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify({ progressNote: comment.trim(), isChecklist: false }),
@@ -363,8 +362,8 @@ export default function TaskDetailDrawer({ task, onClose, onUpdated }: TaskDetai
                 </button>
                 <button
                   onClick={async () => {
-                    if (!task.rawId || !confirm("Hapus tugas ini?")) return;
-                    const res = await fetch(`/api/tasks/${task.rawId}`, { method: "DELETE" });
+                    if (!task.id || !confirm("Hapus tugas ini?")) return;
+                    const res = await fetch(`/api/tasks/${task.id}`, { method: "DELETE" });
                     if (res.ok) { onUpdated?.(); onClose(); }
                   }}
                   className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors"
@@ -379,7 +378,7 @@ export default function TaskDetailDrawer({ task, onClose, onUpdated }: TaskDetai
           <div className="flex items-center gap-2 flex-wrap mb-4">
             <StatusDropdown
               status={currentStatus}
-              taskId={task.rawId ?? ""}
+              taskId={task.id ?? ""}
               isOwnerOrAdmin={isOwnerOrAdmin}
               onStatusChange={handleStatusChange}
             />
@@ -475,9 +474,9 @@ export default function TaskDetailDrawer({ task, onClose, onUpdated }: TaskDetai
           {activeTab === "progress" ? (
             <div className="flex flex-col gap-4">
               {/* Add progress — hanya untuk owner atau admin */}
-              {isOwnerOrAdmin && task.rawId && (
+              {isOwnerOrAdmin && task.id && (
                 <AddProgressForm
-                  taskId={task.rawId}
+                  taskId={task.id}
                   onAdded={handleProgressAdded}
                 />
               )}

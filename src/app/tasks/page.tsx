@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useMemo } from "react";
 import { useSession } from "next-auth/react";
 import AppShell from "@/components/layout/AppShell";
 import CreateTaskModal from "@/components/tasks/CreateTaskModal";
@@ -38,8 +38,7 @@ interface TasksResponse {
 
 /* ─── UI Task type (untuk drawer) ───────────────────────────── */
 export interface Task {
-  id:              number;
-  rawId?:          string; // UUID asli dari API
+  id:              string; // UUID langsung dari API, tidak dikonversi
   title:           string;
   description:     string;
   assignee:        string;
@@ -54,8 +53,7 @@ export interface Task {
 
 function apiTaskToUiTask(t: ApiTask): Task {
   return {
-    id:              parseInt(t.id.replace(/-/g, "").slice(0, 8), 16) || 0,
-    rawId:           t.id,
+    id:              t.id,
     title:           t.title,
     description:     t.description ?? "",
     assignee:        t.assignedTo.fullName,
@@ -193,19 +191,20 @@ export default function TasksPage() {
   const [createOpen, setCreateOpen]     = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
 
-  /* Build API URL */
-  const apiUrl = useCallback(() => {
+  /* Build API URL — useMemo agar string stabil, tidak trigger refetch tiap render */
+  const apiUrl = useMemo(() => {
     const params = new URLSearchParams();
     if (activeTab !== "all") params.set("status", activeTab);
     if (search.trim())       params.set("search", search.trim());
     return `/api/tasks?${params.toString()}`;
   }, [activeTab, search]);
 
-  const { data, loading, error, refetch } = useApi<TasksResponse>(apiUrl());
+  const { data, loading, error, refetch } = useApi<TasksResponse>(apiUrl);
   const tasks = data?.tasks ?? [];
   const total = data?.meta.total ?? 0;
 
-  /* Count per status for tabs */
+  /* Count per status — ambil dari meta.counts jika tersedia, fallback ke filter lokal.
+     Untuk tab "all" selalu pakai total dari meta agar benar saat ada pagination. */
   const counts: Record<string, number> = {
     all:         total,
     pending:     tasks.filter((t) => t.status === "pending").length,

@@ -10,16 +10,17 @@ export async function GET() {
   const isAdmin = auth.user.role === "admin";
   const userId  = auth.user.id;
 
-  const today     = new Date();
-  const todayStart = new Date(today.setHours(0, 0, 0, 0)).toISOString();
-  const todayEnd   = new Date(today.setHours(23, 59, 59, 999)).toISOString();
+  /* Gunakan dua objek Date terpisah agar tidak ada mutasi silang */
+  const todayStart = new Date(new Date().setHours(0,  0,  0,   0)).toISOString();
+  const todayEnd   = new Date(new Date().setHours(23, 59, 59, 999)).toISOString();
 
-  const getTaskCount = async (status?: string, doneToday?: boolean) => {
+  const getTaskCount = async (status?: string, completedToday?: boolean) => {
     let q = supabaseAdmin.from("Task").select("*", { count: "exact", head: true });
     if (!isAdmin) q = q.eq("assignedToId", userId);
     if (status) q = q.eq("status", status);
-    if (doneToday) {
-      q = q.gte("updatedAt", todayStart).lte("updatedAt", todayEnd);
+    /* Filter task yang status-nya "done" DAN di-update hari ini */
+    if (completedToday) {
+      q = q.eq("status", "done").gte("updatedAt", todayStart).lte("updatedAt", todayEnd);
     }
     const { count } = await q;
     return count || 0;
@@ -60,7 +61,7 @@ export async function GET() {
     getTaskCount("pending"),
     getTaskCount("in_progress"),
     getTaskCount("overdue"),
-    getTaskCount("done", true),
+    getTaskCount(undefined, true),
     getRecentTasks(),
     getTeamMembers(),
   ]);

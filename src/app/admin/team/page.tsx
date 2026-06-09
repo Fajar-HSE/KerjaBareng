@@ -17,15 +17,26 @@ import { cn } from "@/lib/utils";
 ═══════════════════════════════════════════════════════════════ */
 type Role   = "admin" | "user";
 
+interface MemberStats {
+  done:    number;
+  pending: number;
+  overdue: number;
+  streak:  number;
+}
+
 interface Member {
-  id: string;
-  fullName: string;
-  email: string;
-  division?: string;
-  role: Role;
+  id:            string;
+  fullName:      string;
+  email:         string;
+  division?:     string;
+  role:          Role;
   emailVerified: boolean;
   avatarInitial: string;
-  createdAt: string;
+  createdAt:     string;
+  status:        "active" | "inactive";
+  stats:         MemberStats;
+  lastActive:    string;
+  phone?:        string;
 }
 
 
@@ -692,6 +703,9 @@ export default function TeamPage() {
           setMembers(data.map((u) => ({
             ...u,
             avatarInitial: (u.fullName || "").split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase(),
+            status:     u.status     ?? "active",
+            stats:      u.stats      ?? { done: 0, pending: 0, overdue: 0, streak: 0 },
+            lastActive: u.lastActive ?? "—",
           })));
         } else {
           setFetchError(data.error ?? "Gagal memuat data anggota.");
@@ -727,6 +741,42 @@ export default function TeamPage() {
 
   function updateMember(updated: Member) {
     setMembers((prev) => prev.map((m) => m.id === updated.id ? updated : m));
+  }
+
+  async function toggleStatus(id: string) {
+    const member = members.find((m) => m.id === id);
+    if (!member) return;
+    const newIsActive = member.status !== "active";
+    const res = await fetch(`/api/admin/users?id=${id}`, {
+      method:  "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ isActive: newIsActive }),
+    });
+    if (res.ok) {
+      setMembers((prev) =>
+        prev.map((m) => m.id === id ? { ...m, status: newIsActive ? "active" : "inactive" } : m)
+      );
+    } else {
+      const data = await res.json();
+      alert(data.error ?? "Gagal mengubah status anggota.");
+    }
+  }
+
+  async function sendResetPassword(member: Member) {
+    try {
+      const res = await fetch("/api/auth/forgot-password", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ email: member.email }),
+      });
+      const data = await res.json();
+      alert(res.ok
+        ? `Link reset password telah dikirim ke ${member.email}.`
+        : (data.error ?? "Gagal mengirim link reset password.")
+      );
+    } catch {
+      alert("Terjadi kesalahan jaringan.");
+    }
   }
 
   /* ── Summary stats ── */
@@ -915,7 +965,10 @@ export default function TeamPage() {
           <div className="flex justify-end gap-2">
             <button onClick={() => setResetTarget(null)} className="btn btn-secondary h-9 px-4 text-sm rounded-lg">Batal</button>
             <button
-              onClick={() => setResetTarget(null)}
+              onClick={async () => {
+                if (resetTarget) await sendResetPassword(resetTarget);
+                setResetTarget(null);
+              }}
               className="btn btn-primary h-9 px-4 text-sm rounded-lg"
             >
               Kirim Link Reset

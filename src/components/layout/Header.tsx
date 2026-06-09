@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Bell, Search, Plus, ChevronDown } from "lucide-react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
@@ -8,10 +8,25 @@ import { cn } from "@/lib/utils";
 
 /* ─── Notification dot ──────────────────────────────────────── */
 function NotifBell() {
+  const [unread, setUnread] = useState(0);
+
+  useEffect(() => {
+    fetch("/api/notifications")
+      .then((r) => r.ok ? r.json() : null)
+      .then((d) => { if (d?.unreadCount != null) setUnread(d.unreadCount); })
+      .catch(() => {/* silent — jangan crash header */});
+  }, []);
+
   return (
     <Link href="/notifications" className="relative btn btn-ghost p-2 rounded-lg" aria-label="Notifikasi">
       <Bell size={18} />
-      <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-amber-500 border-2 border-white" />
+      {unread > 0 && (
+        <span className="absolute top-1 right-1 min-w-[16px] h-4 px-0.5 rounded-full bg-amber-500 border-2 border-white flex items-center justify-center">
+          <span className="text-[9px] font-bold text-white leading-none">
+            {unread > 99 ? "99+" : unread}
+          </span>
+        </span>
+      )}
     </Link>
   );
 }

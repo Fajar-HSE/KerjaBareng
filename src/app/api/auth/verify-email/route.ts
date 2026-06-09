@@ -9,6 +9,33 @@ export async function GET(req: NextRequest) {
   }
 
   try {
+    /* Cari user berdasarkan token terlebih dahulu, lalu proses verifikasi */
+    const { data: targetUser } = await supabaseAdmin
+      .from("Profile")
+      .select("id, emailVerified, emailVerifyExpires")
+      .eq("emailVerifyToken", token)
+      .maybeSingle();
+
+    /* Jika token tidak ditemukan di DB sama sekali — invalid */
+    if (!targetUser) {
+      return NextResponse.redirect(new URL("/verify-email?error=invalid", req.url));
+    }
+
+    /* Jika user sudah terverifikasi sebelumnya (klik ulang link yang sama) */
+    if (targetUser.emailVerified) {
+      return NextResponse.redirect(new URL("/verify-email?success=true", req.url));
+    }
+
+    /* Cek expired */
+    if (!targetUser.emailVerifyExpires || new Date(targetUser.emailVerifyExpires) < new Date()) {
+      /* Bersihkan token expired */
+      await supabaseAdmin
+        .from("Profile")
+        .update({ emailVerifyToken: null, emailVerifyExpires: null })
+        .eq("id", targetUser.id);
+      return NextResponse.redirect(new URL("/verify-email?error=invalid", req.url));
+    }
+
     /* Atomic update — cegah race condition dari double-click */
     const { data: updated } = await supabaseAdmin
       .from("Profile")
@@ -17,36 +44,13 @@ export async function GET(req: NextRequest) {
         emailVerifyToken:   null,
         emailVerifyExpires: null,
       })
-      .eq("emailVerifyToken", token)
+      .eq("id", targetUser.id)
       .eq("emailVerified", false)
-      .gt("emailVerifyExpires", new Date().toISOString())
       .select("id");
 
     if (!updated || updated.length === 0) {
-      /* Token tidak ditemukan atau sudah dipakai atau expired — bersihkan expired token */
-      await supabaseAdmin
-        .from("Profile")
-        .update({
-          emailVerifyToken:   null,
-          emailVerifyExpires: null,
-        })
-        .eq("emailVerifyToken", token)
-        .lt("emailVerifyExpires", new Date().toISOString());
-
-      /* Cek apakah user sudah terverifikasi (klik ulang link valid) */
-      const { data: alreadyVerified } = await supabaseAdmin
-        .from("Profile")
-        .select("id")
-        .eq("emailVerified", true)
-        .is("emailVerifyToken", null)
-        .limit(1)
-        .maybeSingle();
-
-      if (alreadyVerified) {
-        return NextResponse.redirect(new URL("/verify-email?success=true", req.url));
-      }
-
-      return NextResponse.redirect(new URL("/verify-email?error=invalid", req.url));
+      /* Race condition: verifikasi sudah diproses oleh request lain */
+      return NextResponse.redirect(new URL("/verify-email?success=true", req.url));
     }
 
     return NextResponse.redirect(new URL("/verify-email?success=true", req.url));

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import AppShell from "@/components/layout/AppShell";
 import { useApi } from "@/hooks/useApi";
 import { NotifItemSkeleton } from "@/components/ui/Skeleton";
@@ -121,10 +121,12 @@ export default function NotificationsPage() {
   const [localNotifs, setLocalNotifs] = useState<Notification[] | null>(null);
   const notifs = localNotifs ?? data?.notifications ?? [];
 
-  /* Sync dari API saat data berubah */
-  if (data?.notifications && !localNotifs) {
-    setLocalNotifs(data.notifications);
-  }
+  /* Sync dari API saat data berubah — gunakan useEffect, bukan render body */
+  useEffect(() => {
+    if (data?.notifications) {
+      setLocalNotifs(data.notifications);
+    }
+  }, [data]);
 
   const unreadCount = notifs.filter((n) => !n.isRead).length;
 

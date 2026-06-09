@@ -7,10 +7,22 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 // Digunakan khusus di backend API route untuk operasi yang butuh akses penuh (bypass RLS)
-// Ini mensimulasikan perilaku Prisma sebelumnya yang punya full access ke tabel.
-export const supabaseAdmin = createClient(supabaseUrl, process.env.SUPABASE_SERVICE_ROLE_KEY || supabaseAnonKey, {
-  auth: {
-    autoRefreshToken: false,
-    persistSession: false,
-  },
-});
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+if (!serviceRoleKey && typeof window === "undefined") {
+  // Tampilkan warning di server startup — jangan crash production, tapi log jelas
+  console.warn(
+    "[supabase] SUPABASE_SERVICE_ROLE_KEY tidak di-set. " +
+    "supabaseAdmin akan menggunakan anon key — operasi yang butuh bypass RLS akan gagal!"
+  );
+}
+
+export const supabaseAdmin = createClient(
+  supabaseUrl,
+  serviceRoleKey ?? supabaseAnonKey,
+  {
+    auth: {
+      autoRefreshToken: false,
+      persistSession:   false,
+    },
+  }
+);
