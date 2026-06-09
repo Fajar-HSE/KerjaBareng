@@ -1,196 +1,367 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
+import { useSession } from "next-auth/react";
 import AppShell from "@/components/layout/AppShell";
-import { Send, Paperclip, Search, Circle, CheckCircle2 } from "lucide-react";
+import {
+  Send, Search, Loader2, AlertTriangle,
+  RefreshCw, MessageSquareOff, Users,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 
-/* ─── Types ─────────────────────────────────────────────────── */
-interface ChatRoom {
-  id: string;
-  name: string;
-  initial: string;
-  lastMessage: string;
-  lastTime: string;
-  unread: number;
-  online: boolean;
-  taskTitle?: string;
+/* ══════════════════════════════════════════════════════════════
+   TYPES
+══════════════════════════════════════════════════════════════ */
+interface Contact {
+  id:          string;
+  fullName:    string;
+  initial:     string;
+  division:    string | null;
+  role:        string;
+  unread:      number;
+  lastMessage: string | null;
+  lastTime:    string | null;
 }
 
-interface Message {
-  id: number;
-  senderId: string;
-  text: string;
-  time: string;
-  isOwn: boolean;
-  attachmentName?: string;
-  read: boolean;
+interface DMessage {
+  id:        string;
+  content:   string;
+  isRead:    boolean;
+  createdAt: string;
+  sender:    { id: string; fullName: string };
+  receiver:  { id: string; fullName: string };
 }
 
-/* ─── Mock Data ─────────────────────────────────────────────── */
-const ROOMS: ChatRoom[] = [
-  { id: "1", name: "Budi Santoso",   initial: "BS", lastMessage: "Oke siap, nanti saya update progress.", lastTime: "14:32", unread: 2, online: true,  taskTitle: "Finalisasi desain landing page" },
-  { id: "2", name: "Citra Ayu",      initial: "CA", lastMessage: "PR sudah saya review, ada beberapa catatan.", lastTime: "13:15", unread: 0, online: true,  taskTitle: "Review PR authentication module" },
-  { id: "3", name: "Deni Ramadhan",  initial: "DR", lastMessage: "Dokumentasi sudah selesai.", lastTime: "11:00", unread: 0, online: false, taskTitle: "Update dokumentasi API v2" },
-  { id: "4", name: "Eka Mulyani",    initial: "EM", lastMessage: "Maaf, ada kendala di upload test.", lastTime: "Kem.", unread: 1, online: false, taskTitle: "Testing fitur upload bukti" },
-  { id: "5", name: "Fajar Laksono",  initial: "FL", lastMessage: "Cron sudah berjalan, monitoring dulu.", lastTime: "Kem.", unread: 0, online: true,  taskTitle: "Setup cron deadline checker" },
-];
+/* ══════════════════════════════════════════════════════════════
+   HELPERS
+══════════════════════════════════════════════════════════════ */
+function formatTime(iso: string) {
+  const d    = new Date(iso);
+  const now  = new Date();
+  const diff = now.getTime() - d.getTime();
+  const days = Math.floor(diff / 86400000);
+  if (days === 0) return d.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
+  if (days === 1) return "Kemarin";
+  if (days < 7)  return d.toLocaleDateString("id-ID", { weekday: "short" });
+  return d.toLocaleDateString("id-ID", { day: "numeric", month: "short" });
+}
 
-const MESSAGES: Record<string, Message[]> = {
-  "1": [
-    { id: 1,  senderId: "1", text: "Halo, update desain landing page sudah sampai mana?",          time: "14:00", isOwn: true,  read: true },
-    { id: 2,  senderId: "BS", text: "Baru selesai wireframe-nya pak, lagi ngerjain mockup.",        time: "14:05", isOwn: false, read: true },
-    { id: 3,  senderId: "1", text: "Oke, nanti kalau mockup selesai langsung share ya ke Figma.",  time: "14:10", isOwn: true,  read: true },
-    { id: 4,  senderId: "BS", text: "Siap! Mau nanya dulu, font heading pakai Inter atau Plus Jakarta Sans?", time: "14:20", isOwn: false, read: true },
-    { id: 5,  senderId: "1", text: "Pakai Inter aja, konsisten sama codebase.",                    time: "14:22", isOwn: true,  read: true },
-    { id: 6,  senderId: "BS", text: "Oke siap, nanti saya update progress.",                       time: "14:32", isOwn: false, read: false, },
-  ],
-  "2": [
-    { id: 1, senderId: "1",  text: "Citra, bisa review PR #42 hari ini?",                          time: "09:00", isOwn: true,  read: true },
-    { id: 2, senderId: "CA", text: "Bisa pak, saya cek sekarang.",                                 time: "09:05", isOwn: false, read: true },
-    { id: 3, senderId: "CA", text: "PR sudah saya review, ada beberapa catatan.",                  time: "13:15", isOwn: false, read: true, attachmentName: "review-notes.md" },
-  ],
-  "3": [
-    { id: 1, senderId: "DR", text: "Dokumentasi sudah selesai, bisa dicek di Confluence.",          time: "11:00", isOwn: false, read: true },
-    { id: 2, senderId: "1",  text: "Mantap, terima kasih Deni.",                                   time: "11:05", isOwn: true,  read: true },
-  ],
-  "4": [
-    { id: 1, senderId: "1",  text: "Eka, gimana progress testing upload?",                         time: "Kem.", isOwn: true,  read: true },
-    { id: 2, senderId: "EM", text: "Maaf, ada kendala di upload test. File PDF di atas 5MB error.", time: "Kem.", isOwn: false, read: false },
-  ],
-  "5": [
-    { id: 1, senderId: "FL", text: "Cron sudah berjalan, monitoring dulu.",                        time: "Kem.", isOwn: false, read: true },
-  ],
-};
+function avatarColor(role: string) {
+  return role === "admin" ? "#d97706" : "#1a5f7a";
+}
 
-/* ─── Room Item ─────────────────────────────────────────────── */
-function RoomItem({ room, active, onClick }: { room: ChatRoom; active: boolean; onClick: () => void }) {
+/* ══════════════════════════════════════════════════════════════
+   CONTACT ITEM
+══════════════════════════════════════════════════════════════ */
+function ContactItem({
+  contact,
+  active,
+  onClick,
+}: {
+  contact: Contact;
+  active:  boolean;
+  onClick: () => void;
+}) {
   return (
     <button
       onClick={onClick}
       className={cn(
-        "w-full flex items-center gap-3 px-4 py-3 text-left transition-colors",
-        active ? "bg-[#e8f4f8] border-r-2 border-[#1a5f7a]" : "hover:bg-slate-50 border-r-2 border-transparent"
+        "w-full flex items-center gap-3 px-4 py-3 text-left transition-colors border-r-2",
+        active
+          ? "bg-[#e8f4f8] border-[#1a5f7a]"
+          : "hover:bg-slate-50 border-transparent"
       )}
     >
-      {/* Avatar */}
       <div className="relative shrink-0">
-        <div className="w-10 h-10 rounded-full bg-[#1a5f7a] flex items-center justify-center">
-          <span className="text-xs font-bold text-white">{room.initial}</span>
+        <div
+          className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-white text-sm"
+          style={{ backgroundColor: avatarColor(contact.role) }}
+        >
+          {contact.initial}
         </div>
-        {room.online && (
-          <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-white" />
+        {contact.unread > 0 && (
+          <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-0.5 rounded-full bg-amber-500 border-2 border-white flex items-center justify-center">
+            <span className="text-[9px] font-bold text-white leading-none">
+              {contact.unread > 9 ? "9+" : contact.unread}
+            </span>
+          </span>
         )}
       </div>
 
-      {/* Info */}
       <div className="flex-1 min-w-0">
-        <div className="flex items-center justify-between">
-          <span className="text-sm font-medium text-slate-800 truncate">{room.name}</span>
-          <span className="text-[11px] text-slate-400 font-mono shrink-0 ml-1">{room.lastTime}</span>
+        <div className="flex items-center justify-between gap-1">
+          <span className={cn(
+            "text-sm truncate",
+            contact.unread > 0 ? "font-semibold text-slate-900" : "font-medium text-slate-800"
+          )}>
+            {contact.fullName}
+          </span>
+          {contact.lastTime && (
+            <span className="text-[11px] text-slate-400 font-mono shrink-0">
+              {formatTime(contact.lastTime)}
+            </span>
+          )}
         </div>
-        <p className="text-xs text-slate-500 truncate mt-0.5">{room.lastMessage}</p>
+        <p className={cn(
+          "text-xs truncate mt-0.5",
+          contact.unread > 0 ? "text-slate-700 font-medium" : "text-slate-400"
+        )}>
+          {contact.lastMessage ?? (contact.division ?? contact.role)}
+        </p>
       </div>
-
-      {/* Unread badge */}
-      {room.unread > 0 && (
-        <span className="shrink-0 min-w-[18px] h-[18px] rounded-full bg-[#1a5f7a] text-white text-[10px] font-bold flex items-center justify-center px-1">
-          {room.unread}
-        </span>
-      )}
     </button>
   );
 }
 
-/* ─── Message Bubble ────────────────────────────────────────── */
-function MessageBubble({ msg }: { msg: Message }) {
+/* ══════════════════════════════════════════════════════════════
+   MESSAGE BUBBLE
+══════════════════════════════════════════════════════════════ */
+function MessageBubble({
+  msg,
+  myId,
+  prevMsg,
+}: {
+  msg:     DMessage;
+  myId:    string;
+  prevMsg: DMessage | null;
+}) {
+  const isOwn     = msg.sender.id === myId;
+  const showTime  = !prevMsg ||
+    new Date(msg.createdAt).getTime() - new Date(prevMsg.createdAt).getTime() > 5 * 60 * 1000;
+
   return (
-    <div className={cn("flex gap-2 max-w-[80%]", msg.isOwn ? "ml-auto flex-row-reverse" : "")}>
-      {!msg.isOwn && (
-        <div className="w-7 h-7 rounded-full bg-[#1a5f7a] flex items-center justify-center shrink-0 mt-auto mb-1">
-          <span className="text-[9px] font-bold text-white">{msg.senderId}</span>
+    <>
+      {showTime && (
+        <div className="flex justify-center my-2">
+          <span className="text-[11px] text-slate-400 bg-slate-100 px-3 py-0.5 rounded-full font-mono">
+            {new Date(msg.createdAt).toLocaleString("id-ID", {
+              day: "numeric", month: "short",
+              hour: "2-digit", minute: "2-digit",
+            })}
+          </span>
         </div>
       )}
-      <div className={cn("flex flex-col gap-1", msg.isOwn ? "items-end" : "items-start")}>
-        <div className={cn(
-          "px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed",
-          msg.isOwn
-            ? "bg-[#1a5f7a] text-white rounded-tr-sm"
-            : "bg-white border border-slate-200 text-slate-800 rounded-tl-sm shadow-card"
-        )}>
-          {msg.text}
-          {msg.attachmentName && (
-            <div className={cn(
-              "flex items-center gap-1.5 mt-2 pt-2 border-t text-xs",
-              msg.isOwn ? "border-white/20 text-white/80" : "border-slate-200 text-[#1a5f7a]"
-            )}>
-              <Paperclip size={11} />
-              {msg.attachmentName}
-            </div>
-          )}
-        </div>
-        <div className="flex items-center gap-1">
-          <span className="text-[10px] text-slate-400 font-mono">{msg.time}</span>
-          {msg.isOwn && (
-            msg.read
-              ? <CheckCircle2 size={11} className="text-[#1a5f7a]" />
-              : <Circle size={11} className="text-slate-300" />
-          )}
+      <div className={cn("flex gap-2 max-w-[75%]", isOwn ? "ml-auto flex-row-reverse" : "")}>
+        {!isOwn && (
+          <div
+            className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 mt-auto mb-1 text-white font-bold"
+            style={{ fontSize: 9, backgroundColor: "#1a5f7a" }}
+          >
+            {msg.sender.fullName.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase()}
+          </div>
+        )}
+        <div className={cn("flex flex-col gap-0.5", isOwn ? "items-end" : "items-start")}>
+          <div className={cn(
+            "px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap break-words",
+            isOwn
+              ? "bg-[#1a5f7a] text-white rounded-tr-sm"
+              : "bg-white border border-slate-200 text-slate-800 rounded-tl-sm shadow-sm"
+          )}>
+            {msg.content}
+          </div>
+          <span className="text-[10px] text-slate-400 font-mono px-1">
+            {new Date(msg.createdAt).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}
+          </span>
         </div>
       </div>
-    </div>
+    </>
   );
 }
 
-/* ─── Page ──────────────────────────────────────────────────── */
+/* ══════════════════════════════════════════════════════════════
+   PAGE
+══════════════════════════════════════════════════════════════ */
 export default function ChatPage() {
-  const [activeRoom, setActiveRoom] = useState<ChatRoom>(ROOMS[0]);
-  const [messages, setMessages]     = useState<Message[]>(MESSAGES[ROOMS[0].id]);
-  const [input, setInput]           = useState("");
-  const [search, setSearch]         = useState("");
-  const endRef = useRef<HTMLDivElement>(null);
+  const { data: session } = useSession();
+  const myId = session?.user?.id ?? "";
 
+  /* ── Contacts ── */
+  const [contacts, setContacts]         = useState<Contact[]>([]);
+  const [contactsLoading, setContactsLoading] = useState(true);
+  const [contactsError, setContactsError]     = useState("");
+  const [search, setSearch]             = useState("");
+
+  /* ── Active conversation ── */
+  const [activeContact, setActiveContact] = useState<Contact | null>(null);
+  const [messages, setMessages]           = useState<DMessage[]>([]);
+  const [msgLoading, setMsgLoading]       = useState(false);
+  const [msgError, setMsgError]           = useState("");
+
+  /* ── Compose ── */
+  const [input, setInput]     = useState("");
+  const [sending, setSending] = useState(false);
+
+  const endRef       = useRef<HTMLDivElement>(null);
+  const textareaRef  = useRef<HTMLTextAreaElement>(null);
+  const pollRef      = useRef<ReturnType<typeof setInterval> | null>(null);
+  const lastCreatedAt = useRef<string | null>(null);
+
+  /* ── Fetch contacts ── */
+  const fetchContacts = useCallback(async () => {
+    try {
+      const res  = await fetch("/api/chat/contacts");
+      const data = await res.json();
+      if (res.ok) {
+        setContacts(data.contacts ?? []);
+        setContactsError("");
+      } else {
+        setContactsError(data.error ?? "Gagal memuat kontak.");
+      }
+    } catch {
+      setContactsError("Gagal terhubung ke server.");
+    } finally {
+      setContactsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchContacts(); }, [fetchContacts]);
+
+  /* ── Fetch messages ── */
+  const fetchMessages = useCallback(async (contactId: string, isInitial = false) => {
+    if (isInitial) setMsgLoading(true);
+    setMsgError("");
+    try {
+      const afterParam = !isInitial && lastCreatedAt.current
+        ? `&after=${encodeURIComponent(lastCreatedAt.current)}`
+        : "";
+      const res  = await fetch(`/api/chat?withUserId=${contactId}${afterParam}`);
+      const data = await res.json();
+      if (!res.ok) { setMsgError(data.error ?? "Gagal memuat pesan."); return; }
+
+      const incoming: DMessage[] = data.messages ?? [];
+      if (incoming.length > 0) {
+        if (isInitial) {
+          setMessages(incoming);
+        } else {
+          setMessages((prev) => {
+            const existingIds = new Set(prev.map((m) => m.id));
+            const fresh = incoming.filter((m) => !existingIds.has(m.id));
+            return fresh.length > 0 ? [...prev, ...fresh] : prev;
+          });
+        }
+        lastCreatedAt.current = incoming[incoming.length - 1].createdAt;
+
+        /* Update unread di sidebar */
+        setContacts((prev) =>
+          prev.map((c) =>
+            c.id === contactId
+              ? { ...c, unread: 0, lastMessage: incoming[incoming.length - 1].content, lastTime: incoming[incoming.length - 1].createdAt }
+              : c
+          )
+        );
+      }
+    } catch {
+      if (isInitial) setMsgError("Gagal terhubung ke server.");
+    } finally {
+      if (isInitial) setMsgLoading(false);
+    }
+  }, []);
+
+  /* ── Select contact ── */
+  function selectContact(contact: Contact) {
+    if (activeContact?.id === contact.id) return;
+    setActiveContact(contact);
+    setMessages([]);
+    setInput("");
+    setMsgError("");
+    lastCreatedAt.current = null;
+
+    /* Clear polling lama */
+    if (pollRef.current) clearInterval(pollRef.current);
+
+    fetchMessages(contact.id, true).then(() => {
+      /* Mulai polling setiap 4 detik */
+      pollRef.current = setInterval(() => {
+        fetchMessages(contact.id, false);
+      }, 4000);
+    });
+  }
+
+  /* ── Cleanup polling on unmount ── */
+  useEffect(() => {
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, []);
+
+  /* ── Scroll ke bawah saat pesan baru ── */
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  function selectRoom(room: ChatRoom) {
-    setActiveRoom(room);
-    setMessages(MESSAGES[room.id] ?? []);
-  }
-
-  function sendMessage() {
-    if (!input.trim()) return;
-    const newMsg: Message = {
-      id:       messages.length + 1,
-      senderId: "1",
-      text:     input.trim(),
-      time:     new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }),
-      isOwn:    true,
-      read:     false,
-    };
-    setMessages((prev) => [...prev, newMsg]);
+  /* ── Send message ── */
+  async function sendMessage() {
+    if (!input.trim() || !activeContact || sending) return;
+    const text = input.trim();
     setInput("");
+
+    /* Optimistic update */
+    const optimisticMsg: DMessage = {
+      id:        `optimistic-${Date.now()}`,
+      content:   text,
+      isRead:    false,
+      createdAt: new Date().toISOString(),
+      sender:    { id: myId, fullName: session?.user?.name ?? "Saya" },
+      receiver:  { id: activeContact.id, fullName: activeContact.fullName },
+    };
+    setMessages((prev) => [...prev, optimisticMsg]);
+
+    setSending(true);
+    try {
+      const res  = await fetch("/api/chat", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ receiverId: activeContact.id, content: text }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        /* Ganti optimistic dengan pesan nyata */
+        setMessages((prev) =>
+          prev.map((m) => m.id === optimisticMsg.id ? data : m)
+        );
+        lastCreatedAt.current = data.createdAt;
+
+        /* Update preview di sidebar */
+        setContacts((prev) =>
+          prev.map((c) =>
+            c.id === activeContact.id
+              ? { ...c, lastMessage: text, lastTime: data.createdAt }
+              : c
+          )
+        );
+      } else {
+        /* Hapus optimistic jika gagal */
+        setMessages((prev) => prev.filter((m) => m.id !== optimisticMsg.id));
+        setMsgError(data.error ?? "Gagal mengirim pesan.");
+      }
+    } catch {
+      setMessages((prev) => prev.filter((m) => m.id !== optimisticMsg.id));
+      setMsgError("Gagal terhubung ke server.");
+    } finally {
+      setSending(false);
+      textareaRef.current?.focus();
+    }
   }
 
-  const filteredRooms = ROOMS.filter((r) =>
-    r.name.toLowerCase().includes(search.toLowerCase())
+  const filteredContacts = contacts.filter((c) =>
+    c.fullName.toLowerCase().includes(search.toLowerCase()) ||
+    (c.division ?? "").toLowerCase().includes(search.toLowerCase())
   );
 
+  /* ══════════════════════════════════════════════════════════
+     RENDER
+  ══════════════════════════════════════════════════════════ */
   return (
-    <AppShell title="Chat" subtitle="Diskusi langsung dengan anggota tim">
-      {/* Override padding — full height chat layout */}
-      <div className="-m-6 h-[calc(100vh-60px)] flex overflow-hidden rounded-none">
+    <AppShell title="Chat" subtitle="Pesan langsung dengan anggota tim">
+      <div className="-m-6 h-[calc(100vh-60px)] flex overflow-hidden">
 
-        {/* ── Sidebar Rooms ── */}
+        {/* ── Sidebar Contacts ───────────────────────────────── */}
         <div className="w-72 shrink-0 flex flex-col bg-white border-r border-slate-200">
-          {/* Search */}
+          {/* Header */}
           <div className="px-4 py-3 border-b border-slate-100">
             <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-sm">
               <Search size={14} className="text-slate-400 shrink-0" />
               <input
                 type="text"
-                placeholder="Cari percakapan..."
+                placeholder="Cari anggota tim..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="bg-transparent outline-none w-full text-slate-700 placeholder:text-slate-400"
@@ -198,94 +369,161 @@ export default function ChatPage() {
             </div>
           </div>
 
-          {/* Room list */}
+          {/* List */}
           <div className="flex-1 overflow-y-auto">
-            {filteredRooms.map((room) => (
-              <RoomItem
-                key={room.id}
-                room={room}
-                active={activeRoom.id === room.id}
-                onClick={() => selectRoom(room)}
-              />
-            ))}
-          </div>
-        </div>
-
-        {/* ── Chat Area ── */}
-        <div className="flex-1 flex flex-col min-w-0 bg-[#f8fafc]">
-          {/* Chat header */}
-          <div className="px-5 py-3.5 bg-white border-b border-slate-200 flex items-center gap-3 shrink-0">
-            <div className="relative shrink-0">
-              <div className="w-9 h-9 rounded-full bg-[#1a5f7a] flex items-center justify-center">
-                <span className="text-xs font-bold text-white">{activeRoom.initial}</span>
+            {contactsLoading ? (
+              <div className="flex flex-col gap-2 p-4">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <div key={i} className="flex items-center gap-3 animate-pulse">
+                    <div className="w-10 h-10 rounded-full bg-slate-200 shrink-0" />
+                    <div className="flex-1 flex flex-col gap-1.5">
+                      <div className="h-3 bg-slate-200 rounded w-3/4" />
+                      <div className="h-2.5 bg-slate-100 rounded w-1/2" />
+                    </div>
+                  </div>
+                ))}
               </div>
-              {activeRoom.online && (
-                <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-white" />
-              )}
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-slate-900">{activeRoom.name}</p>
-              {activeRoom.taskTitle && (
-                <p className="text-xs text-slate-400 truncate">
-                  Task: <span className="text-[#1a5f7a]">{activeRoom.taskTitle}</span>
-                </p>
-              )}
-            </div>
-            <div className="flex items-center gap-1">
-              <span className={cn(
-                "flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full",
-                activeRoom.online ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"
-              )}>
-                <span className={cn("w-1.5 h-1.5 rounded-full", activeRoom.online ? "bg-emerald-500" : "bg-slate-400")} />
-                {activeRoom.online ? "Online" : "Offline"}
-              </span>
-            </div>
-          </div>
-
-          {/* Messages */}
-          <div className="flex-1 overflow-y-auto px-5 py-5 flex flex-col gap-3">
-            {messages.map((msg) => (
-              <MessageBubble key={msg.id} msg={msg} />
-            ))}
-            <div ref={endRef} />
-          </div>
-
-          {/* Input */}
-          <div className="px-5 py-4 bg-white border-t border-slate-200 shrink-0">
-            <div className="flex items-end gap-2">
-              <button className="text-slate-400 hover:text-slate-600 transition-colors p-1.5 rounded-lg hover:bg-slate-100 shrink-0">
-                <Paperclip size={18} />
-              </button>
-              <div className="flex-1 relative">
-                <textarea
-                  placeholder="Tulis pesan..."
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      sendMessage();
-                    }
-                  }}
-                  rows={1}
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm resize-none outline-none focus:border-[#1a5f7a] focus:ring-2 focus:ring-[#1a5f7a]/10 transition-all bg-white max-h-32"
-                  style={{ fieldSizing: "content" } as React.CSSProperties}
+            ) : contactsError ? (
+              <div className="p-4 flex flex-col items-center gap-2 text-center">
+                <AlertTriangle size={18} className="text-red-400" />
+                <p className="text-xs text-red-500">{contactsError}</p>
+                <button onClick={fetchContacts} className="text-xs text-[#1a5f7a] hover:underline flex items-center gap-1">
+                  <RefreshCw size={11} /> Coba lagi
+                </button>
+              </div>
+            ) : filteredContacts.length === 0 ? (
+              <div className="p-6 flex flex-col items-center gap-2 text-center">
+                <Users size={22} className="text-slate-300" />
+                <p className="text-xs text-slate-400">Tidak ada anggota tim</p>
+              </div>
+            ) : (
+              filteredContacts.map((c) => (
+                <ContactItem
+                  key={c.id}
+                  contact={c}
+                  active={activeContact?.id === c.id}
+                  onClick={() => selectContact(c)}
                 />
-              </div>
-              <button
-                onClick={sendMessage}
-                disabled={!input.trim()}
-                className="btn btn-primary w-10 h-10 p-0 rounded-xl shrink-0 disabled:opacity-40"
-                aria-label="Kirim pesan"
-              >
-                <Send size={16} />
-              </button>
-            </div>
-            <p className="text-[11px] text-slate-400 mt-2 ml-1">
-              Enter untuk kirim · Shift+Enter untuk baris baru
-            </p>
+              ))
+            )}
           </div>
         </div>
+
+        {/* ── Chat Area ───────────────────────────────────────── */}
+        {!activeContact ? (
+          /* Empty state */
+          <div className="flex-1 flex flex-col items-center justify-center gap-3 bg-[#f8fafc]">
+            <div className="w-14 h-14 rounded-2xl bg-[#e8f4f8] flex items-center justify-center">
+              <MessageSquareOff size={24} className="text-[#1a5f7a]" />
+            </div>
+            <p className="text-slate-600 font-medium">Pilih percakapan</p>
+            <p className="text-xs text-slate-400">Klik nama anggota tim untuk mulai chat</p>
+          </div>
+        ) : (
+          <div className="flex-1 flex flex-col min-w-0 bg-[#f8fafc]">
+
+            {/* Chat header */}
+            <div className="px-5 py-3.5 bg-white border-b border-slate-200 flex items-center gap-3 shrink-0">
+              <div
+                className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-white text-sm shrink-0"
+                style={{ backgroundColor: avatarColor(activeContact.role) }}
+              >
+                {activeContact.initial}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-slate-900">{activeContact.fullName}</p>
+                <p className="text-xs text-slate-400">
+                  {activeContact.division ?? activeContact.role}
+                </p>
+              </div>
+            </div>
+
+            {/* Messages */}
+            <div className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-1">
+              {msgLoading ? (
+                <div className="flex-1 flex items-center justify-center gap-2 text-slate-400">
+                  <Loader2 size={18} className="animate-spin" />
+                  <span className="text-sm">Memuat pesan...</span>
+                </div>
+              ) : msgError ? (
+                <div className="flex flex-col items-center justify-center gap-2 py-10">
+                  <AlertTriangle size={18} className="text-red-400" />
+                  <p className="text-sm text-red-500">{msgError}</p>
+                  <button
+                    onClick={() => fetchMessages(activeContact.id, true)}
+                    className="text-xs text-[#1a5f7a] hover:underline flex items-center gap-1"
+                  >
+                    <RefreshCw size={11} /> Coba lagi
+                  </button>
+                </div>
+              ) : messages.length === 0 ? (
+                <div className="flex-1 flex flex-col items-center justify-center gap-2 text-center py-16">
+                  <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center">
+                    <Send size={18} className="text-slate-300" />
+                  </div>
+                  <p className="text-sm text-slate-500 font-medium">Belum ada pesan</p>
+                  <p className="text-xs text-slate-400">Mulai percakapan dengan {activeContact.fullName}</p>
+                </div>
+              ) : (
+                messages.map((msg, i) => (
+                  <MessageBubble
+                    key={msg.id}
+                    msg={msg}
+                    myId={myId}
+                    prevMsg={i > 0 ? messages[i - 1] : null}
+                  />
+                ))
+              )}
+              <div ref={endRef} />
+            </div>
+
+            {/* Error send */}
+            {msgError && !msgLoading && messages.length > 0 && (
+              <div className="px-5 py-2 flex items-center gap-2 text-xs text-red-500 bg-red-50 border-t border-red-100">
+                <AlertTriangle size={13} />
+                {msgError}
+              </div>
+            )}
+
+            {/* Input */}
+            <div className="px-5 py-4 bg-white border-t border-slate-200 shrink-0">
+              <div className="flex items-end gap-2">
+                <div className="flex-1 relative">
+                  <textarea
+                    ref={textareaRef}
+                    placeholder={`Pesan ke ${activeContact.fullName}...`}
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        sendMessage();
+                      }
+                    }}
+                    rows={1}
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm resize-none outline-none focus:border-[#1a5f7a] focus:ring-2 focus:ring-[#1a5f7a]/10 transition-all bg-white max-h-32"
+                    style={{ fieldSizing: "content" } as React.CSSProperties}
+                  />
+                </div>
+                <button
+                  onClick={sendMessage}
+                  disabled={!input.trim() || sending}
+                  className="btn btn-primary w-10 h-10 p-0 rounded-xl shrink-0 disabled:opacity-40"
+                  aria-label="Kirim pesan"
+                >
+                  {sending
+                    ? <Loader2 size={15} className="animate-spin" />
+                    : <Send size={15} />
+                  }
+                </button>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-1.5 ml-1">
+                Enter untuk kirim · Shift+Enter untuk baris baru
+              </p>
+            </div>
+
+          </div>
+        )}
       </div>
     </AppShell>
   );
