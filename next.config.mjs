@@ -1,5 +1,18 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  /* Kurangi memory usage saat build */
+  swcMinify: true,
+  experimental: {
+    /* Matikan source maps di development untuk hemat memori */
+    webpackBuildWorker: false,
+  },
+  webpack: (config, { dev }) => {
+    if (dev) {
+      /* Di mode dev, matikan source map yang besar */
+      config.devtool = false;
+    }
+    return config;
+  },
   async headers() {
     return [
       {
