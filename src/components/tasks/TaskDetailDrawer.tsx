@@ -282,6 +282,11 @@ export default function TaskDetailDrawer({ task, onClose, onUpdated }: TaskDetai
   const [comment, setComment]       = useState("");
   const [sendingComment, setSendingComment] = useState(false);
 
+  /* ── Inline edit state ── */
+  const [editing, setEditing]   = useState(false);
+  const [editForm, setEditForm] = useState({ title: "", description: "" });
+  const [editLoading, setEditLoading] = useState(false);
+
   // Sinkronkan status saat task berubah
   useEffect(() => {
     if (task) setCurrentStatus(task.status);
@@ -315,11 +320,28 @@ export default function TaskDetailDrawer({ task, onClose, onUpdated }: TaskDetai
 
   function handleProgressAdded(item: ProgressItem) {
     setProgresses((prev) => [item, ...prev]);
-    // Jika isChecklist → status jadi done
     if (item.isChecklist) {
       setCurrentStatus("done");
       onUpdated?.();
     }
+  }
+
+  function startEdit() {
+    setEditForm({ title: task!.title, description: task!.description });
+    setEditing(true);
+  }
+
+  async function handleSaveEdit() {
+    if (!editForm.title.trim() || !task?.id) return;
+    setEditLoading(true);
+    try {
+      const res = await fetch(`/api/tasks/${task.id}`, {
+        method:  "PUT",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ title: editForm.title.trim(), description: editForm.description.trim() }),
+      });
+      if (res.ok) { setEditing(false); onUpdated?.(); }
+    } catch { /* silent */ } finally { setEditLoading(false); }
   }
 
   async function handleSendComment() {
@@ -352,12 +374,48 @@ export default function TaskDetailDrawer({ task, onClose, onUpdated }: TaskDetai
         {/* ── Header ── */}
         <div className="px-6 pt-2 pb-5 border-b border-slate-100">
           <div className="flex items-start justify-between gap-3 mb-3">
-            <h1 className="text-base font-semibold text-slate-900 leading-snug flex-1">
-              {task.title}
-            </h1>
-            {isAdmin && (
+            {editing ? (
+              <div className="flex-1 flex flex-col gap-2">
+                <input
+                  type="text"
+                  value={editForm.title}
+                  onChange={(e) => setEditForm((f) => ({ ...f, title: e.target.value }))}
+                  className="w-full px-3 py-2 rounded-lg border border-[#1a5f7a] text-sm font-semibold outline-none ring-2 ring-[#1a5f7a]/10"
+                  autoFocus
+                />
+                <textarea
+                  value={editForm.description}
+                  onChange={(e) => setEditForm((f) => ({ ...f, description: e.target.value }))}
+                  rows={2}
+                  placeholder="Deskripsi (opsional)"
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200 text-xs resize-none outline-none focus:border-[#1a5f7a] focus:ring-2 focus:ring-[#1a5f7a]/10"
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleSaveEdit}
+                    disabled={editLoading || !editForm.title.trim()}
+                    className="btn btn-primary h-7 px-3 text-xs rounded-lg gap-1 disabled:opacity-50"
+                  >
+                    {editLoading ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />}
+                    Simpan
+                  </button>
+                  <button onClick={() => setEditing(false)} className="btn btn-secondary h-7 px-3 text-xs rounded-lg">
+                    <X size={11} /> Batal
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <h1 className="text-base font-semibold text-slate-900 leading-snug flex-1">
+                {task.title}
+              </h1>
+            )}
+            {isAdmin && !editing && (
               <div className="flex items-center gap-1 shrink-0">
-                <button className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors">
+                <button
+                  onClick={startEdit}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-[#1a5f7a] hover:bg-[#e8f4f8] transition-colors"
+                  title="Edit tugas"
+                >
                   <Edit2 size={14} />
                 </button>
                 <button
@@ -367,6 +425,7 @@ export default function TaskDetailDrawer({ task, onClose, onUpdated }: TaskDetai
                     if (res.ok) { onUpdated?.(); onClose(); }
                   }}
                   className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                  title="Hapus tugas"
                 >
                   <Trash2 size={14} />
                 </button>

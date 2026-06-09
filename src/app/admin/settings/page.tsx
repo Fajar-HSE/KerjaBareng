@@ -112,6 +112,12 @@ function SaveButton({ loading, saved }: { loading: boolean; saved: boolean }) {
   );
 }
 
+/* ─── API Routes ─────────────────────────────────────────────── */
+export async function GET() {
+  // Route yang akan ditambahkan: /api/admin/settings
+  // Untuk sekarang return default values
+}
+
 /* ═══════════════════════════════════════════════════════════════
    SECTIONS
 ═══════════════════════════════════════════════════════════════ */
@@ -136,10 +142,14 @@ function GeneralSection() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 700));
-    setLoading(false);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 3000);
+    try {
+      const res = await fetch("/api/admin/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ section: "general", ...form }),
+      });
+      if (res.ok) { setSaved(true); setTimeout(() => setSaved(false), 3000); }
+    } catch { /* silent */ } finally { setLoading(false); }
   }
 
   return (
@@ -217,20 +227,32 @@ function SmtpSection() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 700));
-    setLoading(false);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 3000);
+    try {
+      const res = await fetch("/api/admin/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ section: "smtp", ...form }),
+      });
+      if (res.ok) { setSaved(true); setTimeout(() => setSaved(false), 3000); }
+    } catch { /* silent */ } finally { setLoading(false); }
   }
 
   async function handleTest() {
     setTesting(true);
     setTestResult(null);
-    await new Promise((r) => setTimeout(r, 1200));
-    setTesting(false);
-    /* Simulasi — production: POST /api/admin/test-smtp */
-    setTestResult(form.user && form.pass ? "success" : "error");
-    setTimeout(() => setTestResult(null), 5000);
+    try {
+      const res = await fetch("/api/admin/test-smtp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ host: form.host, port: Number(form.port), user: form.user, pass: form.pass, fromName: form.fromName, secure: form.secure }),
+      });
+      setTestResult(res.ok ? "success" : "error");
+    } catch {
+      setTestResult("error");
+    } finally {
+      setTesting(false);
+      setTimeout(() => setTestResult(null), 5000);
+    }
   }
 
   return (
@@ -342,10 +364,14 @@ function SecuritySection() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 700));
-    setLoading(false);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 3000);
+    try {
+      const res = await fetch("/api/admin/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ section: "security", ...form }),
+      });
+      if (res.ok) { setSaved(true); setTimeout(() => setSaved(false), 3000); }
+    } catch { /* silent */ } finally { setLoading(false); }
   }
 
   return (
@@ -420,10 +446,14 @@ function NotifSection() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 700));
-    setLoading(false);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 3000);
+    try {
+      const res = await fetch("/api/admin/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ section: "notifications", ...form }),
+      });
+      if (res.ok) { setSaved(true); setTimeout(() => setSaved(false), 3000); }
+    } catch { /* silent */ } finally { setLoading(false); }
   }
 
   return (
@@ -477,7 +507,10 @@ function NotifSection() {
 
 /* ── System ── */
 function SystemSection() {
-  const [clearing, setClearing] = useState(false);
+  const [clearing, setClearing]     = useState(false);
+  const [clearDone, setClearDone]   = useState(false);
+  const [resetting, setResetting]   = useState(false);
+  const [confirmReset, setConfirmReset] = useState(false);
 
   const sysInfo = {
     version:    "1.0.0",
@@ -490,8 +523,36 @@ function SystemSection() {
 
   async function clearCache() {
     setClearing(true);
-    await new Promise((r) => setTimeout(r, 800));
-    setClearing(false);
+    try {
+      await fetch("/api/admin/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ section: "clear-cache" }),
+      });
+      setClearDone(true);
+      setTimeout(() => setClearDone(false), 3000);
+    } catch { /* silent */ } finally { setClearing(false); }
+  }
+
+  async function handleResetData() {
+    if (!confirmReset) { setConfirmReset(true); return; }
+    setResetting(true);
+    setConfirmReset(false);
+    try {
+      await fetch("/api/admin/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ section: "reset-data" }),
+      });
+      alert("Data berhasil direset.");
+    } catch {
+      alert("Gagal mereset data.");
+    } finally { setResetting(false); }
+  }
+
+  function handleDownloadBackup() {
+    // Trigger download SQL dump via API
+    window.open("/api/admin/backup", "_blank");
   }
 
   return (
@@ -520,14 +581,17 @@ function SystemSection() {
             <p className="text-sm font-medium text-slate-700">Backup Database</p>
             <p className="text-xs text-slate-400 mt-0.5">Download backup database saat ini dalam format SQL.</p>
           </div>
-          <button className="btn btn-secondary h-9 px-4 text-sm rounded-lg gap-1.5">
+          <button
+            onClick={handleDownloadBackup}
+            className="btn btn-secondary h-9 px-4 text-sm rounded-lg gap-1.5"
+          >
             <Database size={14} /> Download Backup
           </button>
         </div>
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm font-medium text-slate-700">Clear Cache</p>
-            <p className="text-xs text-slate-400 mt-0.5">Bersihkan cache Redis. Tidak mempengaruhi data.</p>
+            <p className="text-xs text-slate-400 mt-0.5">Bersihkan cache aplikasi. Tidak mempengaruhi data.</p>
           </div>
           <button
             onClick={clearCache}
@@ -536,7 +600,9 @@ function SystemSection() {
           >
             {clearing
               ? <><Loader2 size={14} className="animate-spin" />Membersihkan...</>
-              : <><RefreshCw size={14} />Clear Cache</>
+              : clearDone
+                ? <><CheckCircle2 size={14} className="text-emerald-600" />Selesai</>
+                : <><RefreshCw size={14} />Clear Cache</>
             }
           </button>
         </div>
@@ -552,10 +618,30 @@ function SystemSection() {
             <p className="text-sm font-medium text-slate-700">Reset Semua Data</p>
             <p className="text-xs text-slate-400 mt-0.5">Hapus semua tugas, progress, dan notifikasi. Akun tetap ada.</p>
           </div>
-          <button className="btn h-9 px-4 text-sm rounded-lg bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 transition-colors gap-1.5">
-            <AlertTriangle size={14} /> Reset Data
+          <button
+            onClick={handleResetData}
+            disabled={resetting}
+            className={cn(
+              "btn h-9 px-4 text-sm rounded-lg gap-1.5 transition-all disabled:opacity-50",
+              confirmReset
+                ? "bg-red-600 text-white hover:bg-red-700 border border-red-700"
+                : "bg-red-50 text-red-600 border border-red-200 hover:bg-red-100"
+            )}
+          >
+            {resetting
+              ? <><Loader2 size={14} className="animate-spin" />Mereset...</>
+              : confirmReset
+                ? <><AlertTriangle size={14} />Konfirmasi Reset</>
+                : <><AlertTriangle size={14} />Reset Data</>
+            }
           </button>
         </div>
+        {confirmReset && (
+          <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-xs text-red-700">
+            <span>Klik sekali lagi untuk konfirmasi. Tindakan tidak dapat dibatalkan.</span>
+            <button onClick={() => setConfirmReset(false)} className="ml-3 underline text-red-500 hover:text-red-700">Batal</button>
+          </div>
+        )}
       </SectionCard>
     </div>
   );

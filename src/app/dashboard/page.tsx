@@ -161,9 +161,13 @@ function RecentTaskTable({ tasks }: { tasks: DashboardData["recentTasks"] }) {
                   </span>
                 </td>
                 <td className="px-4 py-3.5">
-                  <button className="text-slate-400 hover:text-slate-600 transition-colors">
+                  <a
+                    href={`/tasks`}
+                    className="text-slate-400 hover:text-[#1a5f7a] transition-colors"
+                    title="Lihat detail"
+                  >
                     <MoreHorizontal size={16} />
-                  </button>
+                  </a>
                 </td>
               </tr>
             ))}

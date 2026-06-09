@@ -99,7 +99,7 @@ function TaskCard({ task, onClick }: { task: ApiTask; onClick: () => void }) {
             {task.title}
           </h3>
         </div>
-        <button onClick={(e) => e.stopPropagation()} className="text-slate-400 hover:text-slate-600 shrink-0 mt-0.5">
+        <button onClick={(e) => { e.stopPropagation(); onClick(); }} className="text-slate-400 hover:text-slate-600 shrink-0 mt-0.5" title="Lihat detail">
           <MoreHorizontal size={15} />
         </button>
       </div>
@@ -167,8 +167,9 @@ function TaskRow({ task, onClick }: { task: ApiTask; onClick: () => void }) {
       </td>
       <td className="px-4 py-3.5">
         <button
-          onClick={(e) => e.stopPropagation()}
+          onClick={(e) => { e.stopPropagation(); onClick(); }}
           className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-slate-600 transition-all"
+          title="Lihat detail"
         >
           <MoreHorizontal size={16} />
         </button>

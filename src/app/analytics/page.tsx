@@ -527,9 +527,23 @@ export default function AnalyticsPage() {
           </div>
 
           {isAdmin && (
-            <button className="btn btn-secondary h-9 px-3 text-sm gap-1.5 rounded-lg">
+            <button
+              onClick={() => {
+                const rows = [
+                  ["Nama", "Tugas Selesai", "Streak", "Completion Rate"],
+                  ...LEADERBOARD.map(m => [m.name, m.done, m.streak, `${m.rate}%`]),
+                ];
+                const csv = rows.map(r => r.join(",")).join("\n");
+                const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url; a.download = `laporan-${period}.csv`; a.click();
+                URL.revokeObjectURL(url);
+              }}
+              className="btn btn-secondary h-9 px-3 text-sm gap-1.5 rounded-lg"
+            >
               <ChevronDown size={14} />
-              Export PDF
+              Export CSV
             </button>
           )}
         </div>
